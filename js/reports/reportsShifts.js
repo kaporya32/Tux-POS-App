@@ -399,10 +399,11 @@ function endShift() {
 
   }
 
+
   const endMsg =
     '■ END SHIFT\n\n' +
     'Are you sure you want to end the shift?\n' +
-    'Current stock will automatically become the opening balance for the next shift, then ALL workers, Admin and Tux Admin will be logged out.';
+    'Current stock will automatically become the opening balance for the next shift. Ending the shift will not log workers or administrators out.';
 
   if (
     !confirm(endMsg)
@@ -544,7 +545,7 @@ async function finalizeEndShift() {
       if (
         snapshot.adminReports &&
         typeof adminReportFinance ===
-          'object'
+        'object'
       ) {
 
         snapshot.adminReports.bank =
@@ -641,7 +642,7 @@ async function finalizeEndShift() {
        LOG EVERYONE OUT
        ===================================================== */
 
-    logoutEveryoneAtEndOfDay();
+
 
 
     /* =====================================================
@@ -655,10 +656,10 @@ async function finalizeEndShift() {
        FINAL MESSAGE
        ===================================================== */
 
-    alert(
-      'Shift ended successfully. Current stock was saved as the opening balance for the next shift, the shift was saved to Supabase, monthly finance and Admin Reports were updated, the Kitchen Board was reset, reports were refreshed, and all workers, Admin and Tux Admin were logged out. The next shift will start from Order #1.'
-    );
 
+    alert(
+      'Shift ended successfully. Current stock was saved as the opening balance for the next shift, the shift was saved to Supabase, monthly finance and Admin Reports were updated, the Kitchen Board was reset, reports were refreshed, and all login sessions remain active. The next shift will start from Order #1.'
+    );
   } catch (error) {
 
     console.error(

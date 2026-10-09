@@ -15,7 +15,7 @@ let stockRealtimeRefreshTimer = null;
 /* =========================================================
    PERMISSION HELPERS
    ========================================================= */
-a
+
 /*
  * Stock configuration changes are Tux Admin only.
  *

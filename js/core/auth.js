@@ -100,6 +100,21 @@ function ensureTuxNavbarVisibilityStyles() {
 }
 
 
+
+/* =========================================================
+   TUX POS — NIGHTLY LOGOUT
+   Server-side cron owns the global session reset.
+   NEVER call this from normal End Shift.
+   ========================================================= */
+
+async function logoutEveryoneAtEndOfDay() {
+  console.warn(
+    'TUX POS — Global logout is managed by the server-side nightly job. ' +
+    'Normal End Shift must not call this function.'
+  );
+
+  return false;
+}
 function updateTuxNavbarVisibility() {
   ensureTuxNavbarVisibilityStyles();
 
@@ -314,18 +329,39 @@ async function checkTuxSharedSessionVersion() {
 }
 
 
+
 function startTuxSharedSessionWatcher() {
   if (window.tuxSharedSessionWatcher) return;
 
-  void checkTuxSharedSessionVersion();
+  async function runSessionChecks() {
+    try {
+      await checkTuxSharedSessionVersion();
 
-  window.tuxSharedSessionWatcher =
-    window.setInterval(function () {
-      void checkTuxSharedSessionVersion();
-    }, TUX_SESSION_CHECK_INTERVAL);
+      // The global check may have cleared the local login.
+      // Only validate worker sessions if workers remain logged in.
+      if (
+        Array.isArray(activeStaffIds) &&
+        activeStaffIds.length > 0
+      ) {
+        await checkTuxAllWorkerSessions();
+      }
+    } catch (error) {
+      console.error(
+        'TUX POS — Session watcher failed:',
+        error
+      );
+    }
+  }
+
+  void runSessionChecks();
+
+  window.tuxSharedSessionWatcher = window.setInterval(
+    function () {
+      void runSessionChecks();
+    },
+    TUX_SESSION_CHECK_INTERVAL
+  );
 }
-
-
 /* =========================================================
    LOGIN SESSION
    ========================================================= */
@@ -560,6 +596,7 @@ async function staffModalAction() {
    STAFF LOGIN
    ========================================================= */
 
+
 async function staffLogin(password) {
   const enteredPassword = String(password || '').trim();
 
@@ -569,8 +606,8 @@ async function staffLogin(password) {
   }
 
   /*
-     TUX ADMIN
-  */
+   * TUX ADMIN
+   */
 
   const tuxPassword =
     adminAccount && adminAccount.tuxPassword
@@ -581,15 +618,8 @@ async function staffLogin(password) {
     try {
       await stampTuxSessionVersionAfterLogin();
     } catch (error) {
-      console.error(
-        'TUX POS — Could not verify the shared session:',
-        error
-      );
-
-      alert(
-        'Unable to verify the shared session with Supabase. Please check your connection and try again.'
-      );
-
+      console.error('TUX POS — Shared session verification failed:', error);
+      alert('Unable to verify the shared session. Check your connection and try again.');
       return;
     }
 
@@ -607,8 +637,8 @@ async function staffLogin(password) {
   }
 
   /*
-     ADMIN
-  */
+   * ADMIN
+   */
 
   if (
     adminAccount &&
@@ -618,15 +648,8 @@ async function staffLogin(password) {
     try {
       await stampTuxSessionVersionAfterLogin();
     } catch (error) {
-      console.error(
-        'TUX POS — Could not verify the shared session:',
-        error
-      );
-
-      alert(
-        'Unable to verify the shared session with Supabase. Please check your connection and try again.'
-      );
-
+      console.error('TUX POS — Shared session verification failed:', error);
+      alert('Unable to verify the shared session. Check your connection and try again.');
       return;
     }
 
@@ -644,62 +667,99 @@ async function staffLogin(password) {
   }
 
   /*
-     WORKER
-  */
+   * WORKER
+   */
 
   const worker = Array.isArray(workersList)
     ? workersList.find(
         item =>
           item &&
-          String(item.password || '') === enteredPassword
+          String(item.password || '') === enteredPassword &&
+          item.active !== false
       )
     : null;
 
-  if (worker) {
-    try {
-      await stampTuxSessionVersionAfterLogin();
-    } catch (error) {
-      console.error(
-        'TUX POS — Could not verify the shared session:',
-        error
-      );
+  if (!worker) {
+    alert('Invalid password.');
+    return;
+  }
 
-      alert(
-        'Unable to verify the shared session with Supabase. Please check your connection and try again.'
-      );
+  const workerId = String(worker.id);
 
+  if (!workerId || workerId === 'undefined') {
+    alert('This worker has an invalid ID. Please contact the administrator.');
+    return;
+  }
+
+  if (!Array.isArray(activeStaffIds)) {
+    activeStaffIds = [];
+  }
+
+  /*
+   * Avoid acquiring a second lock for the same worker
+   * in this browser.
+   */
+
+  if (
+    activeStaffIds.some(id => String(id) === workerId)
+  ) {
+    alert(`${worker.name || 'Worker'} is already logged in on this browser.`);
+    return;
+  }
+
+  let acquiredSession = false;
+  let attendanceStarted = false;
+
+  try {
+    /*
+     * Verify the shared nightly session version first.
+     */
+
+    await stampTuxSessionVersionAfterLogin();
+
+    /*
+     * Acquire the worker's global single-device lock.
+     */
+
+    const session = await acquireTuxWorkerSession(
+      worker,
+      enteredPassword
+    );
+
+    if (!session) {
       return;
     }
 
-    const workerId = String(worker.id);
+    acquiredSession = true;
 
-    if (!Array.isArray(activeStaffIds)) {
-      activeStaffIds = [];
+    /*
+     * Start attendance and wait for the result.
+     */
+
+    if (typeof createAttendanceSession === 'function') {
+      const attendanceResult = await createAttendanceSession(worker.id);
+
+      if (attendanceResult === false) {
+        throw new Error('Attendance session creation failed.');
+      }
+
+      attendanceStarted = true;
     }
 
-    if (
-      !activeStaffIds.some(
-        id => String(id) === workerId
-      )
-    ) {
-      activeStaffIds.push(workerId);
-    }
+    /*
+     * Complete local login only after the lock is acquired.
+     */
+
+
+if (!activeStaffIds.some(id => String(id) === String(workerId))) {
+  activeStaffIds.push(String(workerId));
+}
 
     tuxAdminActive = false;
     adminActive = false;
 
-    try {
-      if (typeof createAttendanceSession === 'function') {
-        createAttendanceSession(worker.id);
-      }
-    } catch (error) {
-      console.error(
-        'TUX POS — Failed to create attendance session:',
-        error
-      );
-    }
-
     worker.attendance = true;
+
     saveLoginSession();
 
     try {
@@ -707,11 +767,8 @@ async function staffLogin(password) {
         'tuxWorkersList',
         JSON.stringify(workersList)
       );
-    } catch (error) {
-      console.error(
-        'TUX POS — Failed to save workers:',
-        error
-      );
+    } catch (storageError) {
+      console.error('TUX POS — Failed to save workers:', storageError);
     }
 
     closeStaffLogin();
@@ -723,20 +780,51 @@ async function staffLogin(password) {
     }
 
     alert(`${worker.name || 'Worker'} logged in successfully.`);
-    return;
+  } catch (error) {
+    console.error('TUX POS — Worker login failed:', error);
+
+    /*
+     * Roll back the lock if attendance setup failed.
+     */
+
+    if (acquiredSession) {
+      try {
+        if (
+          attendanceStarted &&
+          typeof endAttendanceSession === 'function'
+        ) {
+          await endAttendanceSession(worker.id);
+        }
+      } catch (attendanceError) {
+        console.error(
+          'TUX POS — Attendance rollback failed:',
+          attendanceError
+        );
+      }
+
+      try {
+        await releaseTuxWorkerSession(worker.id);
+      } catch (releaseError) {
+        console.error(
+          'TUX POS — Failed to release worker lock:',
+          releaseError
+        );
+      }
+    }
+
+    alert(
+      'Worker login failed. Please check your connection and try again.'
+    );
   }
-
-  alert('Invalid password.');
 }
-
 
 /* =========================================================
    STAFF LOGOUT
    ========================================================= */
 
 
-async function staffLogout(password) {
 
+async function staffLogout(password) {
   const enteredPassword = String(password || '').trim();
 
   if (!enteredPassword) {
@@ -749,7 +837,6 @@ async function staffLogout(password) {
    */
 
   if (tuxAdminActive) {
-
     const tuxPassword =
       adminAccount && adminAccount.tuxPassword
         ? String(adminAccount.tuxPassword)
@@ -776,7 +863,6 @@ async function staffLogout(password) {
    */
 
   if (adminActive) {
-
     if (
       !adminAccount ||
       !adminAccount.password ||
@@ -819,22 +905,32 @@ async function staffLogout(password) {
   }
 
   try {
-
     /*
-     * Wait for Supabase to close the attendance session.
-     * Do not log out locally if saving fails.
+     * Close attendance first.
      */
 
     await endAttendanceSession(worker.id);
 
+    /*
+     * Release the global worker lock.
+     */
+
+    const released = await releaseTuxWorkerSession(worker.id);
+
+    if (!released) {
+      alert(
+        'Attendance was closed, but the worker session lock could not be released. Please contact the administrator before trying another device.'
+      );
+      return;
+    }
+
+    /*
+     * Clear this worker from the local login.
+     */
+
     activeStaffIds = activeStaffIds.filter(
       id => String(id) !== String(worker.id)
     );
-
-    /*
-     * Do not set worker.attendance = false.
-     * Attendance must remain an array of session records.
-     */
 
     saveLoginSession();
 
@@ -859,20 +955,13 @@ async function staffLogout(password) {
     );
 
     alert(`${worker.name || 'Worker'} logged out.`);
-
   } catch (error) {
-
-    console.error(
-      'TUX POS — Worker logout failed:',
-      error
-    );
+    console.error('TUX POS — Worker logout failed:', error);
 
     alert(
-      'Logout failed because the attendance session could not be closed. Please try again.'
+      'Logout could not be completed. Please check the connection and try again.'
     );
-
   }
-
 }
 
 /* =========================================================
@@ -1261,4 +1350,190 @@ if (document.readyState === 'loading') {
   );
 } else {
   startTuxAuthUI();
+}
+
+/* =========================================================
+   TUX POS — SINGLE-DEVICE WORKER LOGIN
+   Each worker can have one active browser session.
+   ========================================================= */
+
+const TUX_WORKER_SESSION_TOKENS_KEY = 'tuxWorkerSessionTokens';
+
+function getTuxWorkerSessionTokens() {
+  try {
+    const stored = sessionStorage.getItem(
+      TUX_WORKER_SESSION_TOKENS_KEY
+    );
+
+    return stored ? JSON.parse(stored) : {};
+  } catch (error) {
+    console.error(
+      'Failed to read worker session tokens:',
+      error
+    );
+
+    return {};
+  }
+}
+
+function saveTuxWorkerSessionTokens(tokens) {
+  sessionStorage.setItem(
+    TUX_WORKER_SESSION_TOKENS_KEY,
+    JSON.stringify(tokens)
+  );
+}
+
+async function acquireTuxWorkerSession(worker, password) {
+  if (!worker || !worker.id) {
+    throw new Error('Invalid worker information.');
+  }
+
+  const { data, error } = await supabaseClient.rpc(
+    'acquire_tux_worker_session',
+    {
+      p_worker_id: worker.id,
+      p_password: password
+    }
+  );
+
+  if (error) {
+    console.error('Worker session acquisition failed:', error);
+    throw error;
+  }
+
+  if (!data || data.ok !== true) {
+    if (data?.reason === 'already_logged_in') {
+      alert('This worker is already logged in on another device.');
+      return null;
+    }
+
+    if (data?.reason === 'invalid_credentials') {
+      alert('Invalid worker credentials. Please try again.');
+      return null;
+    }
+
+    alert('Unable to log in this worker. Please try again.');
+    return null;
+  }
+
+  const tokens = getTuxWorkerSessionTokens();
+  tokens[worker.id] = data.token;
+  saveTuxWorkerSessionTokens(tokens);
+
+  return data;
+}
+
+async function releaseTuxWorkerSession(workerId) {
+  const tokens = getTuxWorkerSessionTokens();
+  const token = tokens[workerId];
+
+  if (!token) {
+    console.warn(
+      'No local worker session token found:',
+      workerId
+    );
+    return false;
+  }
+
+  const { data, error } = await supabaseClient.rpc(
+    'release_tux_worker_session',
+    {
+      p_worker_id: workerId,
+      p_session_token: token
+    }
+  );
+
+  if (error) {
+    console.error('Worker session release failed:', error);
+    throw error;
+  }
+
+  if (data === true) {
+    delete tokens[workerId];
+    saveTuxWorkerSessionTokens(tokens);
+    return true;
+  }
+
+  return false;
+}
+
+async function checkTuxWorkerSession(workerId) {
+  const tokens = getTuxWorkerSessionTokens();
+  const token = tokens[workerId];
+
+  if (!token) return false;
+
+  const { data, error } = await supabaseClient.rpc(
+    'check_tux_worker_session',
+    {
+      p_worker_id: workerId,
+      p_session_token: token
+    }
+  );
+
+  if (error) {
+    console.error('Worker session validation failed:', error);
+    return null;
+  }
+
+  return data === true;
+}
+
+async function checkTuxAllWorkerSessions() {
+  if (!Array.isArray(activeStaffIds) || activeStaffIds.length === 0) {
+    return;
+  }
+
+  const workerIds = [...activeStaffIds].map(String);
+
+  for (const workerId of workerIds) {
+    try {
+      const valid = await checkTuxWorkerSession(workerId);
+
+      // null means a temporary network/RPC error.
+      // Do not log out workers because of a temporary error.
+      if (valid === null) {
+        continue;
+      }
+
+      if (!valid) {
+        const tokens = getTuxWorkerSessionTokens();
+        delete tokens[workerId];
+        saveTuxWorkerSessionTokens(tokens);
+
+        activeStaffIds = activeStaffIds.filter(
+          id => String(id) !== workerId
+        );
+
+        saveLoginSession();
+
+        console.warn(
+          'TUX POS — Worker session expired or invalidated:',
+          workerId
+        );
+
+        if (typeof updateStaffUI === 'function') {
+          updateStaffUI();
+        }
+
+        if (typeof applyRolePermissions === 'function') {
+          applyRolePermissions();
+        }
+
+        if (typeof updateStaffStatus === 'function') {
+          updateStaffStatus();
+        }
+
+        alert(
+          'A worker session has expired or been logged out from another session.'
+        );
+      }
+    } catch (error) {
+      console.error(
+        'TUX POS — Worker session check failed:',
+        workerId,
+        error
+      );
+    }
+  }
 }
