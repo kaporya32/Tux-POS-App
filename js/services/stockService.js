@@ -15,7 +15,7 @@ let stockRealtimeRefreshTimer = null;
 /* =========================================================
    PERMISSION HELPERS
    ========================================================= */
-
+a
 /*
  * Stock configuration changes are Tux Admin only.
  *
@@ -2152,4 +2152,154 @@ async function deductStockForOrder(
 
   }
 
+}
+
+/* =========================================================
+   TUX POS — ORDER-SPECIFIC STOCK VALIDATION
+   ========================================================= */
+
+/*
+ * Calculates the total ingredients required by the current
+ * order using the saved recipes and current stock quantities.
+ *
+ * The minimum-stock threshold is NOT a blocking condition.
+ * An order is blocked only when available stock is insufficient.
+ */
+
+function getCashierLowStockItems(orderItems) {
+  const items = Array.isArray(orderItems) ? orderItems : [];
+  const requiredStock = {};
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+
+    if (!item) continue;
+
+    const menuItem = item.menuItemId
+      ? { id: item.menuItemId }
+      : findMenuItemByName(item.name);
+
+    if (!menuItem || !menuItem.id) {
+      console.warn(
+        'TUX POS — Cannot find menu item for stock validation:',
+        item.name
+      );
+
+      continue;
+    }
+
+    const recipe = getRecipeForMenuItem(menuItem.id) || {};
+    const itemQuantity = Number(item.qty || 1);
+
+    if (
+      !Number.isFinite(itemQuantity) ||
+      itemQuantity <= 0
+    ) {
+      continue;
+    }
+
+    Object.keys(recipe).forEach(function (stockItemId) {
+      const recipeQuantity = Number(recipe[stockItemId] || 0);
+      const requiredQuantity = recipeQuantity * itemQuantity;
+
+      if (
+        !Number.isFinite(requiredQuantity) ||
+        requiredQuantity <= 0
+      ) {
+        return;
+      }
+
+      if (!requiredStock[stockItemId]) {
+        requiredStock[stockItemId] = 0;
+      }
+
+      requiredStock[stockItemId] += requiredQuantity;
+    });
+  }
+
+  const shortages = [];
+
+  Object.keys(requiredStock).forEach(function (stockItemId) {
+    const stockItem = stockInventory[stockItemId];
+    const required = requiredStock[stockItemId];
+
+    if (!stockItem || stockItem.active === false) {
+      shortages.push({
+        id: stockItemId,
+        name: stockItem
+          ? stockItem.name
+          : 'Missing stock item',
+        required: required,
+        current: 0,
+        shortBy: required,
+        unit: stockItem ? stockItem.unit || '' : ''
+      });
+
+      return;
+    }
+
+    const available = Number(stockItem.current);
+
+    if (!Number.isFinite(available)) {
+      shortages.push({
+        id: stockItemId,
+        name: stockItem.name,
+        required: required,
+        current: 0,
+        shortBy: required,
+        unit: stockItem.unit || ''
+      });
+
+      return;
+    }
+
+    /*
+     * Do not compare against stockItem.min.
+     * Minimum stock is a warning threshold, not a blocker.
+     */
+
+    if (available + 0.0000001 < required) {
+      shortages.push({
+        id: stockItemId,
+        name: stockItem.name,
+        required: required,
+        current: available,
+        shortBy: Math.round(
+          (required - available) * 10000
+        ) / 10000,
+        unit: stockItem.unit || ''
+      });
+    }
+  });
+
+  return shortages;
+}
+
+
+/* =========================================================
+   DISPLAY ORDER-SPECIFIC STOCK SHORTAGES
+   ========================================================= */
+
+function showCashierLowStockPopup(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return;
+  }
+
+  const details = items.map(function (item) {
+    const unit = item.unit ? ' ' + item.unit : '';
+
+    return (
+      '• ' + item.name + '\n' +
+      '  Required: ' + item.required + unit + '\n' +
+      '  Available: ' + item.current + unit + '\n' +
+      '  Short by: ' + item.shortBy + unit
+    );
+  }).join('\n\n');
+
+  alert(
+    'CANNOT SEND ORDER TO KITCHEN\n\n' +
+    'The current order requires more stock than is available:\n\n' +
+    details +
+    '\n\nPlease update the stock before sending this order.'
+  );
 }

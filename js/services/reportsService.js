@@ -469,159 +469,221 @@ function getReportExpensesForCurrentShift() {
 
 
 /* =========================================================
+   GET CURRENT SHIFT DONE SALES
+   ========================================================= */
+
+function getCurrentShiftDoneSalesForReport() {
+
+  return getReportSalesForCurrentShift()
+    .filter(
+      function (order) {
+
+        return (
+          order.status ===
+          'done'
+        );
+
+      }
+    );
+
+}
+
+
+/* =========================================================
+   GET CURRENT SHIFT EXPENSES
+   ========================================================= */
+
+function getCurrentShiftExpensesForReport() {
+
+  return getReportExpensesForCurrentShift();
+
+}
+
+
+/* =========================================================
    TOTAL SALES
    Cash + InstaPay
+   CURRENT SHIFT ONLY
    ========================================================= */
 
 function getReportTotalSales() {
 
-  return reportSales
-    .filter(function (order) {
+  const sales =
+    getCurrentShiftDoneSalesForReport();
 
-      return order.status === 'done';
 
-    })
-    .reduce(function (total, order) {
+  return sales.reduce(
+    function (total, order) {
 
       return (
         total +
-        Number(order.cashPaid || 0) +
-        Number(order.instaPaid || 0)
+        Number(
+          order.cashPaid || 0
+        ) +
+        Number(
+          order.instaPaid || 0
+        )
       );
 
-    }, 0);
+    },
+    0
+  );
 
 }
 
 
 /* =========================================================
    TOTAL CASH
+   CURRENT SHIFT ONLY
    ========================================================= */
 
 function getReportTotalCash() {
 
-  return reportSales
-    .filter(function (order) {
+  const sales =
+    getCurrentShiftDoneSalesForReport();
 
-      return order.status === 'done';
 
-    })
-    .reduce(function (total, order) {
+  return sales.reduce(
+    function (total, order) {
 
       return (
         total +
-        Number(order.cashPaid || 0)
+        Number(
+          order.cashPaid || 0
+        )
       );
 
-    }, 0);
+    },
+    0
+  );
 
 }
 
 
 /* =========================================================
    TOTAL INSTAPAY
+   CURRENT SHIFT ONLY
    ========================================================= */
 
 function getReportTotalInsta() {
 
-  return reportSales
-    .filter(function (order) {
+  const sales =
+    getCurrentShiftDoneSalesForReport();
 
-      return order.status === 'done';
 
-    })
-    .reduce(function (total, order) {
+  return sales.reduce(
+    function (total, order) {
 
       return (
         total +
-        Number(order.instaPaid || 0)
+        Number(
+          order.instaPaid || 0
+        )
       );
 
-    }, 0);
+    },
+    0
+  );
 
 }
 
 
 /* =========================================================
    TOTAL VISA
+   CURRENT SHIFT ONLY
    ========================================================= */
 
 function getReportTotalVisa() {
 
-  return reportSales
-    .filter(function (order) {
+  const sales =
+    getCurrentShiftDoneSalesForReport();
 
-      return order.status === 'done';
 
-    })
-    .reduce(function (total, order) {
+  return sales.reduce(
+    function (total, order) {
 
       return (
         total +
-        Number(order.visaPaid || 0)
+        Number(
+          order.visaPaid || 0
+        )
       );
 
-    }, 0);
+    },
+    0
+  );
 
 }
 
 
 /* =========================================================
    TOTAL DISCOUNT
+   CURRENT SHIFT ONLY
    ========================================================= */
 
 function getReportTotalDiscount() {
 
-  return reportSales
-    .filter(function (order) {
+  const sales =
+    getCurrentShiftDoneSalesForReport();
 
-      return order.status === 'done';
 
-    })
-    .reduce(function (total, order) {
+  return sales.reduce(
+    function (total, order) {
 
       return (
         total +
-        Number(order.discount || 0)
+        Number(
+          order.discount || 0
+        )
       );
 
-    }, 0);
+    },
+    0
+  );
 
 }
 
 
 /* =========================================================
    TOTAL ORDERS
+   CURRENT SHIFT ONLY
    ========================================================= */
 
 function getReportTotalOrders() {
 
-  return reportSales
-    .filter(function (order) {
+  const sales =
+    getCurrentShiftDoneSalesForReport();
 
-      return order.status === 'done';
 
-    })
-    .length;
+  return sales.length;
 
 }
 
 
 /* =========================================================
    TOTAL EXPENSES
+   CURRENT SHIFT ONLY
    ========================================================= */
 
 function getReportTotalExpenses() {
 
-  return reportExpenses
-    .reduce(function (total, expense) {
+  const expenses =
+    getCurrentShiftExpensesForReport();
+
+
+  return expenses.reduce(
+    function (total, expense) {
 
       return (
         total +
-        Number(expense.cost || 0)
+        Number(
+          expense.cost || 0
+        )
       );
 
-    }, 0);
+    },
+    0
+  );
 
 }
 
@@ -629,6 +691,7 @@ function getReportTotalExpenses() {
 /* =========================================================
    TOTAL HURRY APP
    Visa + Discount
+   CURRENT SHIFT ONLY
    ========================================================= */
 
 function getReportTotalHurryApp() {
@@ -637,6 +700,33 @@ function getReportTotalHurryApp() {
     getReportTotalVisa() +
     getReportTotalDiscount()
   );
+
+}
+
+
+/* =========================================================
+   CLEAR CURRENT REPORT VIEW
+   ========================================================= */
+
+function clearCurrentShiftReportView() {
+
+  /*
+   * We intentionally keep reportSales and reportExpenses
+   * because they contain historical Supabase data.
+   *
+   * The functions above use currentShift.supabaseId,
+   * so when currentShift becomes null after End Shift,
+   * all Daily Report totals automatically become zero.
+   */
+
+  if (
+    typeof renderSalesReport ===
+    'function'
+  ) {
+
+    renderSalesReport();
+
+  }
 
 }
 
@@ -876,7 +966,8 @@ async function refreshReportsFromSupabase() {
 
 
   if (
-    typeof renderSalesReport === 'function'
+    typeof renderSalesReport ===
+    'function'
   ) {
 
     renderSalesReport();
@@ -885,7 +976,8 @@ async function refreshReportsFromSupabase() {
 
 
   if (
-    typeof renderShiftHistory === 'function'
+    typeof renderShiftHistory ===
+    'function'
   ) {
 
     renderShiftHistory();

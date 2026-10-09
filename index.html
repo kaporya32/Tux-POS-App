@@ -1,701 +1,47 @@
 <!DOCTYPE html>
 <html>
 <!-- nikenike -->
+
 <head>
   <base target="_top">
   <meta charset="utf-8">
   <title>Tux POS & Kitchen System</title>
   <link rel="stylesheet" href="css/main.css">
+  <!-- <link rel="stylesheet" href="html/navigation.html">
+  <link rel="stylesheet" href="html/cashier.html"> -->
 </head>
 
 <body>
+  <div id="navigation-container"></div>
+  <div id="cashier-container"></div>
+  <div id="kitchen-container"></div>
+  <div id="expenses-container"></div>
+  <div id="reports-container"></div>
 
-  <!-- Top Navigation Bar -->
-  <div class="top-nav">
-
-    <div class="nav-brand"><span>TUX</span></div>
-
-    <div class="nav-tabs">
-
-      <button class="nav-btn active" id="navCashier" onclick="switchView('cashier', this)">Cashier</button>
-      <button class="nav-btn" id="navBoard" onclick="switchView('board', this)">Kitchen Board</button>
-      <button class="nav-btn" id="navExpenses" onclick="switchView('expenses', this)"
-        style="background: #c0392b; color: white;">Expenses & Purchases</button>
-      <button class="nav-btn" id="navSales" onclick="switchView('sales', this)">Reports</button>
-      <button class="nav-btn" id="navStock" onclick="switchView('stock', this)">Stock</button>
-      <button class="nav-btn" id="navWorkers" onclick="switchView('workers', this)"
-        style="background: #8e44ad; color: white;">Workers</button>
-      <button class="nav-btn" id="navGamiya" onclick="switchView('gamiya', this)"
-        style="background: #16a085; color: white;">Gam3ya</button>
-      <button class="nav-btn" id="navSettings" onclick="switchView('settings', this)"
-        style="background: #2c3e50; color: #f1c40f;">Settings</button>
-
-      <!-- SHIFT CONTROLS -->
-      <div class="shift-controls">
-        <span class="shift-status" id="shiftStatus">Shift Not Started</span>
-        <button class="shift-btn shift-start" id="startShiftBtn" onclick="startShift()">▶ Start Shift</button>
-        <button class="shift-btn shift-end" id="endShiftBtn" onclick="endShift()">■ End Shift</button>
-      </div>
-
-      <!-- STAFF LOGIN BOX -->
-      <div class="staff-login-box">
-        <span class="staff-status" id="staffStatus">Not Logged In</span>
-        <button class="staff-login-btn" id="staffLoginBtn" onclick="openStaffLogin()">👤 Staff Login</button>
-        <button class="staff-logout-btn" id="staffLogoutBtn" onclick="openStaffLogout()">Logout</button>
-      </div>
-
-    </div>
-
-    <div class="nav-clock" id="liveClock">25 Sep 2026</div>
-
-  </div>
-
+  <div id="stock-container"></div>
+  <div id="hawalk-container"></div>
+  <div id="workers-container"></div>
+  <div id="gamiya-container"></div>
+  <div id="settings-container"></div>
+  <div id="modals-container"></div>
+  <div id="print-container"></div>
 
   <!-- =========================================================
-       CASHIER
-       ========================================================= -->
-  <div id="cashier-view" class="view-section active">
-    <div class="pos-container">
-
-      <!-- LEFT MENU -->
-      <div class="menu-panel" id="menuPanelContainer"></div>
-
-      <!-- RIGHT -->
-      <div class="right-panel">
-
-        <!-- EXTRAS -->
-        <div class="extras-panel">
-          <div class="section-title" style="margin-bottom: 3px; background: #1e1e2d; border-left: 3px solid #e74c3c;">
-            EXTRAS</div>
-          <div class="menu-grid" id="extrasGridContainer" style="grid-template-columns: repeat(4, 1fr);"></div>
-        </div>
-
-        <!-- CURRENT ORDER -->
-        <div class="order-panel">
-
-          <div class="order-header">
-            <h2>Current Order</h2>
-            <span style="color: #f1c40f; font-weight: bold; font-size: 10px;">POS System</span>
-          </div>
-
-          <div class="cart-table-header">
-            <span style="width: 40%;">Item</span>
-            <span style="width: 25%; text-align: center;">Qty</span>
-            <span style="width: 35%; text-align: right;">Total</span>
-          </div>
-
-          <div class="cart-box" id="cartContent">
-            <div style="text-align: center; color: #555; margin-top: 15px; font-size: 10px;">No items added yet</div>
-          </div>
-
-          <div class="total-box">
-            <span>Total</span>
-            <span class="total-price" id="grandTotal">0</span>
-          </div>
-
-          <!-- PAYMENT -->
-          <div class="payments">
-            <div><label>Cash:</label><input type="number" id="cashPaid" value="0" oninput="calcRemaining()"></div>
-            <div><label>InstaPay:</label><input type="number" id="instaPaid" value="0" oninput="calcRemaining()"></div>
-            <div><label>Visa:</label><input type="number" id="visaPaid" value="0" oninput="calcRemaining()"></div>
-            <div><label>Discount:</label><input type="number" id="discount" value="0" oninput="calcRemaining()"></div>
-          </div>
-
-          <div style="font-size: 9.5px; margin-bottom: 3px; font-weight: bold; text-align: center;" id="diffText">Diff:
-            0.00 EGP</div>
-
-          <div class="action-row">
-            <button class="btn-action btn-cancel" onclick="cancelLastItem()">Cancel Last</button>
-            <button class="btn-action btn-send" onclick="sendOrder()">Send to Kitchen</button>
-          </div>
-
-          <div class="action-row">
-            <button class="btn-action" style="background: #16a085; flex: 1;" onclick="sendToGamiya()">🍽️ Gam3ya (Staff
-              Meal)</button>
-          </div>
-
-          <div class="whatsapp-row">
-            <input type="text" id="whatsappNumber" class="whatsapp-input" placeholder="WhatsApp No (e.g. 2010xxxxxxxx)">
-            <button class="btn-whatsapp" onclick="sendToWhatsApp()">Send WhatsApp</button>
-          </div>
-
-          <div class="bottom-tools">
-            <button class="tool-btn clear" onclick="clearOrder()">Clear All</button>
-          </div>
-
-        </div>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- =========================================================
-       KITCHEN BOARD
-       ========================================================= -->
-  <div id="board-view" class="view-section">
-    <div class="kds-container">
-      <div class="kds-header">
-        <h2>Kitchen Display System (KDS)</h2>
-        <button class="tool-btn" style="width: auto; padding: 4px 10px;" onclick="loadKitchenOrders()">Refresh</button>
-      </div>
-      <div class="orders-grid" id="kdsOrdersContainer">
-        <div style="color: #666; text-align: center; grid-column: span 3; margin-top: 30px;">No active orders... waiting
-          for cashier</div>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- =========================================================
-       EXPENSES
-       ========================================================= -->
-  <div id="expenses-view" class="view-section">
-    <div class="panel-box" style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px;">
-
-      <div
-        style="background: #1c1c2b; padding: 10px; border-radius: 6px; border: 1px solid #2c2c42; display: flex; flex-direction: column; gap: 6px; height: fit-content;">
-
-        <h3 style="color: #f1c40f; margin: 0; font-size: 12px;">تسجيل مشتريات أو مصروف جديد</h3>
-
-        <div class="form-group">
-          <label>اختر صنف المخزن المرتبط (أو اكتب اسم جديد):</label>
-          <select id="expStockKey" onchange="onExpenseItemSelect()">
-            <option value="">-- صنف عام (بدون ربط مخزن) --</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label>اسم المصروف / المنتج:</label>
-          <input type="text" id="expName" placeholder="مثلاً: لحمة تازة، إيجار، كهرباء...">
-        </div>
-
-        <div class="form-group">
-          <label>الكمية المشتراة (تضاف للمخزن إن وجد):</label>
-          <input type="number" id="expQty" value="1" step="0.01">
-        </div>
-
-        <div class="form-group">
-          <label>الإجمالي المدفوع (LE):</label>
-          <input type="number" id="expCost" placeholder="1500">
-        </div>
-
-        <div class="form-group">
-          <label>ملاحظات:</label>
-          <input type="text" id="expNotes" placeholder="اسم المورد أو تفاصيل إضافية">
-        </div>
-
-        <button class="btn-save" id="saveExpenseBtn" onclick="saveExpense()">حفظ وتسجيل المصروف وتحديث المخزن</button>
-
-      </div>
-
-      <div
-        style="background: #1c1c2b; padding: 10px; border-radius: 6px; border: 1px solid #2c2c42; display: flex; flex-direction: column; gap: 6px; overflow-y: auto;">
-
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <h3 style="color: #f1c40f; margin: 0; font-size: 12px;">سجل المشتريات والمصروفات</h3>
-          <span style="font-size: 11px; font-weight: bold; color: #e74c3c;">
-            إجمالي المصروفات:
-            <span id="totalExpensesDisplay">0.00</span> LE
-          </span>
-        </div>
-
-        <table class="expenses-table">
-          <thead>
-            <tr>
-              <th>الوقت/التاريخ</th>
-              <th>البيان / الصنف</th>
-              <th>الكمية المضافة</th>
-              <th>التكلفة (LE)</th>
-              <th>ملاحظات</th>
-              <th>الإجراء</th>
-            </tr>
-          </thead>
-          <tbody id="expensesTableBody">
-            <tr>
-              <td colspan="5" style="text-align: center; color: #666;">لا توجد مصروفات مسجلة حتى الآن</td>
-            </tr>
-          </tbody>
-        </table>
-
-      </div>
-    </div>
-  </div>
-
-
-  <!-- =========================================================
-       SALES / REPORTS
-       ========================================================= -->
-  <div id="sales-view" class="view-section">
-    <div class="panel-box">
-
-      <h2 style="color: #f1c40f; margin-top: 0; font-size: 14px;">Daily Sales & Financial Reports</h2>
-
-      <div class="stats-grid">
-        <div class="stat-card">
-          <h4>Total Cash</h4><span id="repTotalCash">0.00 LE</span>
-        </div>
-        <div class="stat-card">
-          <h4>Total InstaPay</h4><span id="repTotalInsta">0.00 LE</span>
-        </div>
-        <div class="stat-card">
-          <h4>Total Visa</h4><span id="repTotalVisa">0.00 LE</span>
-        </div>
-        <div class="stat-card">
-          <h4>Total Discounts</h4><span id="repTotalDisc">0.00 LE</span>
-        </div>
-      </div>
-
-      <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 5px;">
-        <div class="stat-card">
-          <h4>Daily Net Sales</h4><span id="repTotalSales">0.00 LE</span>
-        </div>
-        <div class="stat-card" style="border-color: #3498db;">
-          <h4>Bank</h4><span id="repBank" style="color:#3498db;">0.00 LE</span>
-        </div>
-        <div class="stat-card" style="border-color: #c0392b;">
-          <h4>Daily Expenses</h4><span id="repDailyExpenses" style="color: #e67e22;">0.00 LE</span>
-        </div>
-        <div class="stat-card" style="border-color: #c0392b;">
-          <h4>Overall Expenses</h4><span id="repTotalExpenses" style="color: #e74c3c;">0.00 LE</span>
-        </div>
-        <div class="stat-card">
-          <h4>Daily Orders</h4><span id="repTotalOrders">0</span>
-        </div>
-        <div class="stat-card">
-          <h4>Overall Orders</h4><span id="repOverallOrders">0</span>
-        </div>
-        <div class="stat-card" style="border-color: #e67e22;">
-          <h4>Daily Hurry App (Visa + Discount)</h4><span id="repDailyHurry" style="color:#e67e22;">0.00 LE</span>
-        </div>
-        <div class="stat-card" style="border-color: #e67e22;">
-          <h4>Hurry App</h4><span id="repHurry" style="color:#e67e22;">0.00 LE</span>
-        </div>
-      </div>
-
-      <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 5px;">
-        <div class="stat-card">
-          <h4>Profit</h4><span id="repNetProfit">0.00 LE</span>
-        </div>
-      </div>
-
-      <div id="financeControls" style="display: none; gap: 6px; margin-bottom: 5px; align-items: center;">
-        <span style="font-size: 10px; color: #888;">Bank / Overall values:</span>
-        <button class="btn-save" style="padding: 4px 10px; font-size: 10px; background: #2980b9;"
-          onclick="editFinanceValues()">✏️ Edit</button>
-        <button class="btn-save" style="padding: 4px 10px; font-size: 10px; background: #c0392b;"
-          onclick="resetFinanceValues()">♻ Reset to Zero</button>
-      </div>
-
-      <div style="display:flex; justify-content:flex-end; align-items:center; margin-top:8px; margin-bottom:4px;">
-        <button class="btn-save" onclick="printCurrentShiftReport()" style="padding:5px 10px; font-size:10px;">🖨 Print
-          Current Report</button>
-      </div>
-
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px; margin-bottom:4px;">
-        <div style="font-size:11px; color:#888;">Saved Shift History:</div>
-        <div style="display:flex; gap:6px; align-items:center;">
-          <button id="shiftHistoryResetBtn" class="btn-save"
-            style="display:none; padding:4px 8px; font-size:9px; background:#c0392b;" onclick="resetShiftHistory()">♻
-            Reset Shift History</button>
-          <select id="shiftHistorySelect" onchange="showShiftHistory(this.value)"
-            style="padding:4px; background:#0c0c14; border:1px solid #28283d; border-radius:4px; color:#fff; font-size:9px;">
-            <option value="">Select a saved shift</option>
-          </select>
-        </div>
-      </div>
-
-      <div id="shiftHistoryContainer" style="display:flex; flex-direction:column; gap:4px; margin-bottom:6px;"></div>
-
-      <div style="font-size: 11px; color: #888; margin-top: 5px;">Stock Count (Gard) - Current Shift:</div>
-      <div id="gardReportContainer" style="margin-bottom: 8px; overflow-x: auto;"></div>
-
-      <div style="font-size: 11px; color: #888; margin-top: 5px;">Gam3ya (since last Gam3ya reset):</div>
-      <div id="gamiyaReportContainer" style="margin-bottom: 8px; overflow-x: auto;"></div>
-
-      <div style="font-size: 11px; color: #888; margin-top: 5px;">Order details for current session:</div>
-
-      <div id="salesListContainer"
-        style="display: flex; flex-direction: column; gap: 4px; overflow-y: auto; flex-grow: 1;">
-        <div style="color: #666; text-align: center; margin-top: 20px;">No sales recorded yet</div>
-      </div>
-
-    </div>
-  </div>
-
-
-  <!-- =========================================================
-       STOCK
-       ========================================================= -->
-  <div id="stock-view" class="view-section">
-    <div class="panel-box">
-
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-        <h2 style="color: #f1c40f; margin: 0; font-size: 14px;">Inventory & Stock</h2>
-        <button class="btn-save" id="addStockItemBtn" onclick="openAddStockModal()"
-          style="padding: 4px 10px; font-size: 10px;">Add New Stock Item</button>
-      </div>
-
-      <table class="stock-table">
-        <thead>
-          <tr>
-            <th>Item Name</th>
-            <th>Unit</th>
-            <th>Opening</th>
-            <th>Current Balance</th>
-            <th>Min Limit</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody id="stockTableBody"></tbody>
-      </table>
-
-    </div>
-  </div>
-
-
-  <!-- =========================================================
-       WORKERS
-       ========================================================= -->
-  <div id="workers-view" class="view-section">
-    <div class="workers-container">
-
-      <!-- LEFT -->
-      <div class="workers-left">
-
-        <h3 class="worker-title">Workers Management</h3>
-
-        <div class="worker-form">
-          <div><label>Worker Name:</label><input type="text" id="workerName" placeholder="e.g. Ahmed"></div>
-          <div><label>Worker Password:</label><input type="password" id="workerPassword" placeholder="Enter password">
-          </div>
-          <button class="btn-save" id="addWorkerBtn" onclick="addWorker()">+ Add Worker</button>
-        </div>
-
-        <div class="worker-section" id="adminAccountSection">
-          <h4>Admin Account (View-Only Access)</h4>
-          <div class="worker-form">
-            <div><label>Admin Name:</label><input type="text" id="adminName" placeholder="e.g. Owner"></div>
-            <div><label>Admin Password:</label><input type="password" id="adminPasswordInput"
-                placeholder="Set admin password"></div>
-            <button class="btn-save" id="saveAdminAccountBtn" onclick="saveAdminAccount()">💾 Save Admin
-              Account</button>
-          </div>
-          <div id="adminAccountStatus" style="margin-top: 6px; font-size: 10px; color: #aaa;"></div>
-        </div>
-
-        <div class="worker-section" id="tuxAdminSection">
-          <h4>Tux Admin Password</h4>
-          <div class="worker-form">
-            <div><label>Current Tux Admin Password:</label><input type="password" id="tuxCurrentPassword"
-                placeholder="Current password"></div>
-            <div><label>New Tux Admin Password:</label><input type="password" id="tuxNewPassword"
-                placeholder="New password"></div>
-            <div><label>Confirm New Password:</label><input type="password" id="tuxConfirmPassword"
-                placeholder="Repeat new password"></div>
-            <button class="btn-save" id="saveTuxAdminBtn" onclick="changeTuxAdminPassword()">🔐 Change Tux Admin
-              Password</button>
-          </div>
-        </div>
-
-        <div class="worker-section">
-          <h4>Today's Workers</h4>
-          <div id="todayWorkersList">
-            <div class="empty-worker">No workers added yet</div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- RIGHT -->
-      <div class="workers-right">
-
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <h3 class="worker-title" style="margin: 0; flex: 1;">Workers & Attendance</h3>
-          <button class="tool-btn" style="width: auto; padding: 5px 10px;"
-            onclick="renderWorkersView()">Refresh</button>
-        </div>
-
-        <div class="worker-stats-grid">
-          <div class="worker-stat">
-            <div class="worker-stat-title">Total Workers</div>
-            <div class="worker-stat-value" id="workersTotalCount">0</div>
-          </div>
-          <div class="worker-stat">
-            <div class="worker-stat-title">Working Now</div>
-            <div class="worker-stat-value" id="workersPresentToday">0</div>
-          </div>
-          <div class="worker-stat">
-            <div class="worker-stat-title">Today's Hours</div>
-            <div class="worker-stat-value" id="workersTodayHours">0.00</div>
-          </div>
-          <div class="worker-stat">
-            <div class="worker-stat-title">Total Hours</div>
-            <div class="worker-stat-value" id="workersTotalHours">0.00</div>
-          </div>
-        </div>
-
-        <!-- PASSWORDS MANAGER (Tux Admin only) -->
-        <div class="worker-section" id="passwordsManagerSection">
-          <h4>🔑 Passwords Manager (Tux Admin Only)</h4>
-          <table class="worker-summary-table">
-            <thead>
-              <tr>
-                <th>Role</th>
-                <th>Name</th>
-                <th>Password</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody id="passwordsManagerBody"></tbody>
-          </table>
-        </div>
-
-        <!-- ATTENDANCE -->
-        <div class="worker-section">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:7px;">
-            <h4 style="margin:0;">Workers Attendance History</h4>
-            <button id="attendanceResetBtn" class="btn-save"
-              style="display:none; padding:4px 8px; font-size:9px; background:#c0392b;"
-              onclick="resetAttendanceHistory()">♻ Reset Attendance History</button>
-          </div>
-          <div id="selectedWorkerDetails">
-            <div class="empty-worker">No workers added yet</div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
-
-  <!-- =========================================================
-       GAM3YA (STAFF MEALS)
-       ========================================================= -->
-  <div id="gamiya-view" class="view-section">
-    <div class="panel-box">
-
-      <h2 style="color: #f1c40f; margin-top: 0; font-size: 14px;">Gam3ya - Staff Meals (Not Counted in Sales)</h2>
-
-      <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
-        <span style="font-size:10px; color:#aaa; font-weight:bold;">Worker:</span>
-        <select id="gamiyaWorkerFilter" onchange="renderGamiyaView()"
-          style="padding:6px; background:#0c0c14; border:1px solid #28283d; border-radius:4px; color:#fff; font-size:10px;">
-          <option value="all">All Workers</option>
-        </select>
-        <button id="gamiyaResetBtn" class="btn-save"
-          style="display:none; padding:5px 10px; font-size:10px; background:#c0392b; margin-left:auto;"
-          onclick="resetGamiya()">♻ Reset Gam3ya</button>
-      </div>
-
-      <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
-        <div class="stat-card">
-          <h4>Total Gam3ya Orders</h4><span id="gamiyaTotalOrders">0</span>
-        </div>
-        <div class="stat-card">
-          <h4>Total Items Eaten</h4><span id="gamiyaTotalItems">0</span>
-        </div>
-        <div class="stat-card" style="border-color: #16a085;">
-          <h4>Total Value (LE, deducted from stock)</h4><span id="gamiyaTotalValue" style="color: #16a085;">0.00
-            LE</span>
-        </div>
-      </div>
-
-      <table class="expenses-table">
-        <thead>
-          <tr>
-            <th>Date/Time</th>
-            <th>Worker</th>
-            <th>Items</th>
-            <th>Value (LE)</th>
-          </tr>
-        </thead>
-        <tbody id="gamiyaTableBody">
-          <tr>
-            <td colspan="4" style="text-align: center; color: #666;">No staff meals recorded yet</td>
-          </tr>
-        </tbody>
-      </table>
-
-    </div>
-  </div>
-
-
-  <!-- =========================================================
-       SETTINGS
-       ========================================================= -->
-  <div id="settings-view" class="view-section">
-    <div class="panel-box" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-content: start;">
-
-      <div
-        style="background: #1c1c2b; padding: 10px; border-radius: 6px; border: 1px solid #2c2c42; display: flex; flex-direction: column; gap: 6px;">
-
-        <h3 style="color: #f1c40f; margin: 0; font-size: 12px;">Add Menu Item</h3>
-
-        <div class="form-group">
-          <label>Item Name:</label>
-          <input type="text" id="newMenuItemName" placeholder="e.g. Double Burger">
-        </div>
-
-        <div class="form-group">
-          <label>Price (LE):</label>
-          <input type="number" id="newMenuItemPrice" placeholder="150">
-        </div>
-
-        <div class="form-group">
-          <label>Category:</label>
-          <select id="newMenuItemCategory">
-            <option value="sandwiches">Sandwiches & Burgers</option>
-            <option value="combos">Combos (Meals)</option>
-            <option value="fries">Fries & Loaded</option>
-            <option value="hawawshi">Hawawshi</option>
-            <option value="drinks">Drinks</option>
-            <option value="dessert">Zalabya (Dessert)</option>
-            <option value="extras">Extras</option>
-          </select>
-        </div>
-
-        <button class="btn-save" id="addMenuItemBtn" onclick="addNewMenuItem()">Save & Add to Menu</button>
-
-        <div
-          style="border-top: 1px solid #33334d; margin-top: 8px; padding-top: 8px; display: flex; flex-direction: column; gap: 6px;">
-          <h3 style="color: #f1c40f; margin: 0; font-size: 12px;">Delete Menu Item</h3>
-          <div class="form-group">
-            <label>Choose item:</label>
-            <select id="deleteMenuItemSelect"></select>
-          </div>
-          <button class="btn-save" id="deleteMenuItemBtn" style="background: #c0392b;" onclick="deleteMenuItem()">Delete
-            Selected Item</button>
-        </div>
-
-      </div>
-
-      <div
-        style="background: #1c1c2b; padding: 10px; border-radius: 6px; border: 1px solid #2c2c42; display: flex; flex-direction: column; gap: 6px; overflow-y: auto;">
-
-        <h3 style="color: #f1c40f; margin: 0; font-size: 12px;">Stock Settings & Min Limits</h3>
-
-        <table class="settings-table">
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Opening</th>
-              <th>Current</th>
-              <th>Min Limit</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="stockSettingsTableBody"></tbody>
-        </table>
-
-      </div>
-
-      <div
-        style="grid-column: span 2; background: #1c1c2b; padding: 10px; border-radius: 6px; border: 1px solid #2c2c42; display: flex; flex-direction: column; gap: 6px;">
-
-        <h3 style="color: #f1c40f; margin: 0; font-size: 12px;">Item Stock Deductions (Recipes)</h3>
-
-        <div style="font-size: 10px; color: #888;">
-          Choose a menu item, then set how much of each stock item is deducted for every 1 sold. Leave empty or 0 for no
-          deduction. Items counted in kg (like Meat) are entered in grams.
-        </div>
-
-        <div class="form-group">
-          <label>Menu Item:</label>
-          <select id="recipeItemSelect" onchange="renderRecipeEditor()"></select>
-        </div>
-
-        <table class="settings-table">
-          <thead>
-            <tr>
-              <th>Stock Item</th>
-              <th>Deducted per 1 sold</th>
-              <th>Unit</th>
-            </tr>
-          </thead>
-          <tbody id="recipeEditorBody"></tbody>
-        </table>
-
-        <div style="display: flex; gap: 6px;">
-          <button class="btn-save" id="saveRecipeBtn" onclick="saveRecipe()">Save Deductions</button>
-          <button class="btn-save" id="resetRecipeBtn" style="background: #525266;"
-            onclick="resetRecipeToDefault()">Reset Item To Default</button>
-        </div>
-
-      </div>
-
-    </div>
-  </div>
-
-
-  <!-- =========================================================
-       STAFF LOGIN / LOGOUT MODAL
-       ========================================================= -->
-  <div class="staff-modal" id="staffLoginModal">
-    <div class="staff-modal-box">
-      <h3 id="staffModalTitle">👤 Staff Login</h3>
-      <div class="staff-modal-info" id="staffModalInfo">Enter your staff password</div>
-      <input type="password" id="staffPasswordInput" class="staff-password-input" placeholder="Enter password"
-        onkeydown="if(event.key === 'Enter') staffModalAction()">
-      <div class="staff-modal-buttons">
-        <button class="staff-modal-cancel" onclick="closeStaffLogin()">Cancel</button>
-        <button class="staff-modal-login" id="staffModalActionBtn" onclick="staffModalAction()">Login</button>
-      </div>
-    </div>
-  </div>
-
-
-  <!-- =========================================================
-       STOCK COUNT (GARD) MODAL
-       ========================================================= -->
-  <div class="staff-modal" id="countModal">
-    <div class="staff-modal-box" style="width: 460px; max-height: 88vh; overflow-y: auto;">
-
-      <h3 id="countModalTitle">📋 Stock Count (Gard)</h3>
-
-      <div class="staff-modal-info" id="countModalInfo">
-        Count what is physically in the shop and enter it. System quantities are hidden.
-      </div>
-
-      <table class="expenses-table">
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th>Unit</th>
-            <th>Counted Qty</th>
-          </tr>
-        </thead>
-        <tbody id="countModalBody"></tbody>
-      </table>
-
-      <div class="staff-modal-buttons">
-        <button class="staff-modal-cancel" onclick="closeCountModal()">Cancel</button>
-        <button class="staff-modal-login" id="countModalSubmitBtn" onclick="submitCount()">Save Count</button>
-      </div>
-
-    </div>
-  </div>
-
-
-  <!-- PRINT -->
-  <div id="printArea"></div>
-
-
-  <!-- =========================================================
-       SCRIPTS (order matters: plain scripts share one global scope)
+       SCRIPTS
        ========================================================= -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <script src="js/config/supabase.js"></script>
-
   <script src="js/core/utils.js"></script>
   <script src="js/core/state.js"></script>
-
   <script src="js/services/workersService.js"></script>
   <script src="js/services/ordersService.js"></script>
   <script src="js/services/stockService.js"></script>
+  <script src="js/services/hawalkService.js"></script>
   <script src="js/services/menuService.js"></script>
+  <script src="js/services/categoryColorsService.js"></script>
+  <script src="js/settings/categoryColors.js"></script>
   <script src="js/services/shiftsService.js"></script>
-<script src="js/services/gamiyaService.js"></script>
+  <script src="js/services/gamiyaService.js"></script>
   <script src="js/core/auth.js"></script>
   <script src="js/services/expensesService.js"></script>
   <script src="js/services/reportsService.js"></script>
@@ -704,10 +50,116 @@
   <script src="js/cashier/cashier.js"></script>
   <script src="js/kitchen/kitchen.js"></script>
   <script src="js/stock/stock.js"></script>
+  <script src="js/hawalk/hawalk.js"></script>
+  <script src="js/reports/reportsFinance.js"></script>
+  <script src="js/reports/reportsShifts.js"></script>
+  <script src="js/reports/reportsGard.js"></script>
+  <script src="js/reports/reportsGamiya.js"></script>
+  <script src="js/reports/reportsPrint.js"></script>
+  <script src="js/reports/reportsHistory.js"></script>
+  <script src="js/reports/reportsSales.js"></script>
+  <script src="js/reports/reportsAdmin.js"></script>
   <script src="js/reports/reports.js"></script>
+  <!-- <script src="js/main.js"></script> -->
 
-  <script src="js/main.js"></script>
+  <script>
+    (async function loadTuxComponents() {
+      const components = [
+        {
+          file: 'html/navigation.html',
+          container: 'navigation-container'
+        },
+        {
+          file: 'html/cashier.html',
+          container: 'cashier-container'
+        },
+        {
+          file: 'html/kitchen.html',
+          container: 'kitchen-container'
+        },
+        {
+          file: 'html/expenses.html',
+          container: 'expenses-container'
+        },
+        {
+          file: 'html/stock.html',
+          container: 'stock-container'
+        },
+        {
+          file: 'html/hawalk.html',
+          container: 'hawalk-container'
+        },
+        {
+          file: 'html/workers.html',
+          container: 'workers-container'
+        },
+        {
+          file: 'html/gamiya.html',
+          container: 'gamiya-container'
+        },
+        {
+          file: 'html/reports.html',
+          container: 'reports-container'
+        },
+        {
+          file: 'html/settings.html',
+          container: 'settings-container'
+        },
 
+        {
+          file: 'html/modals.html',
+          container: 'modals-container'
+        },
+        {
+          file: 'html/print.html',
+          container: 'print-container'
+        },
+      ];
+
+      try {
+        for (const component of components) {
+          const response = await fetch(component.file);
+
+          if (!response.ok) {
+            throw new Error(
+              `Failed to load ${component.file}: ${response.status}`
+            );
+          }
+
+          const html = await response.text();
+
+          let container = document.getElementById(component.container);
+
+          if (!container) {
+            container = document.createElement('div');
+            container.id = component.container;
+
+            if (component.container === 'navigation-container') {
+              document.body.insertBefore(container, document.body.firstChild);
+            } else {
+              document.body.appendChild(container);
+            }
+          }
+
+          container.innerHTML = html;
+        }
+
+        const mainScript = document.createElement('script');
+        mainScript.src = 'js/main.js';
+        mainScript.onerror = function () {
+          console.error('Failed to load js/main.js');
+          alert('TUX POS could not start. Please refresh the page.');
+        };
+
+        document.body.appendChild(mainScript);
+      } catch (error) {
+        console.error('TUX POS component loading failed:', error);
+        alert(
+          'TUX POS could not load a page component. Check the browser console.'
+        );
+      }
+    })();
+  </script>
 </body>
 
 </html>

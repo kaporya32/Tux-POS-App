@@ -95,17 +95,24 @@ function requireAttendanceWritePermission() {
    START WORKERS REALTIME
    ========================================================= */
 
+
 function startWorkersRealtime() {
 
+  // Avoid creating duplicate subscriptions.
   if (workersRealtimeChannel) {
 
-    supabaseClient.removeChannel(
-      workersRealtimeChannel
+    console.log(
+      'TUX POS — Workers realtime already started.'
     );
 
-    workersRealtimeChannel = null;
+    return;
 
   }
+
+
+  console.log(
+    'TUX POS — Subscribing to workers realtime...'
+  );
 
 
   workersRealtimeChannel =
@@ -166,7 +173,6 @@ function startWorkersRealtime() {
       });
 
 }
-
 
 /* =========================================================
    STOP WORKERS REALTIME
@@ -318,6 +324,7 @@ function syncActiveStaffIdsFromAttendance() {
    SCHEDULE ATTENDANCE REALTIME REFRESH
    ========================================================= */
 
+
 function scheduleAttendanceRealtimeRefresh() {
 
   if (attendanceRealtimeRefreshTimer) {
@@ -342,11 +349,9 @@ function scheduleAttendanceRealtimeRefresh() {
 
 
           /*
-           * Attendance is the shared source of truth
-           * for which workers are currently logged in.
+           * Refresh attendance displays only.
+           * Do not overwrite this device's login session.
            */
-
-          syncActiveStaffIdsFromAttendance();
 
 
           if (
@@ -405,7 +410,6 @@ function scheduleAttendanceRealtimeRefresh() {
     );
 
 }
-
 
 /* =========================================================
    STOP ATTENDANCE REALTIME
@@ -1341,6 +1345,58 @@ async function closeAttendanceSession(
 
 }
 
+async function endAttendanceSession(workerId) {
+
+  const worker = Array.isArray(workersList)
+    ? workersList.find(
+        item => String(item.id) === String(workerId)
+      )
+    : null;
+
+  if (!worker) {
+    throw new Error('Worker not found.');
+  }
+
+  const attendance = Array.isArray(worker.attendance)
+    ? worker.attendance
+    : [];
+
+  const activeRecord = attendance
+    .filter(
+      record =>
+        record.checkIn &&
+        !record.checkOut &&
+        record.status === 'working'
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.checkIn).getTime() -
+        new Date(a.checkIn).getTime()
+    )[0];
+
+  if (!activeRecord) {
+    throw new Error(
+      'No active attendance session found for this worker.'
+    );
+  }
+
+  const checkOut = new Date().toISOString();
+
+  const hours = Math.max(
+    0,
+    Number(
+      calculateWorkedHours(
+        activeRecord.checkIn,
+        checkOut
+      )
+    ) || 0
+  );
+
+  return await closeAttendanceSession(
+    activeRecord.id,
+    hours
+  );
+}
 
 /* =========================================================
    CLOSE ALL OPEN SESSIONS

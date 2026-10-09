@@ -1,0 +1,186 @@
+
+<!-- =========================================================
+       WORKERS
+       ========================================================= -->
+  <div id="workers-view" class="view-section">
+    <div class="workers-container">
+      <div class="workers-left">
+        <h3 class="worker-title">
+          Workers Management
+        </h3>
+        <div class="worker-form">
+          <div>
+            <label>
+              Worker Name:
+            </label>
+            <input type="text" id="workerName" placeholder="e.g. Ahmed">
+          </div>
+          <div>
+            <label>
+              Worker Password:
+            </label>
+            <input type="password" id="workerPassword" placeholder="Enter password">
+          </div>
+          <button class="btn-save" id="addWorkerBtn" onclick="addWorker()">
+            + Add Worker
+          </button>
+        </div>
+        <div class="worker-section" id="adminAccountSection">
+          <h4>
+            Admin Account (View-Only Access)
+          </h4>
+          <div class="worker-form">
+            <div>
+              <label>
+                Admin Name:
+              </label>
+              <input type="text" id="adminName" placeholder="e.g. Owner">
+            </div>
+            <div>
+              <label>
+                Admin Password:
+              </label>
+              <input type="password" id="adminPasswordInput" placeholder="Set admin password">
+            </div>
+            <button class="btn-save" id="saveAdminAccountBtn" onclick="saveAdminAccount()">
+              💾 Save Admin Account
+            </button>
+          </div>
+          <div id="adminAccountStatus" style="
+              margin-top:6px;
+              font-size:10px;
+              color:#aaa;
+            "></div>
+        </div>
+        <div class="worker-section" id="tuxAdminSection">
+          <h4>
+            Tux Admin Password
+          </h4>
+          <div class="worker-form">
+            <div>
+              <label>
+                Current Tux Admin Password:
+              </label>
+              <input type="password" id="tuxCurrentPassword" placeholder="Current password">
+            </div>
+            <div>
+              <label>
+                New Tux Admin Password:
+              </label>
+              <input type="password" id="tuxNewPassword" placeholder="New password">
+            </div>
+            <div>
+              <label>
+                Confirm New Password:
+              </label>
+              <input type="password" id="tuxConfirmPassword" placeholder="Repeat new password">
+            </div>
+            <button class="btn-save" id="saveTuxAdminBtn" onclick="changeTuxAdminPassword()">
+              🔐 Change Tux Admin Password
+            </button>
+          </div>
+        </div>
+        <div class="worker-section">
+          <h4>
+            Today's Workers
+          </h4>
+          <div id="todayWorkersList">
+            <div class="empty-worker">
+              No workers added yet
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="workers-right">
+        <div style="
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:8px;
+          ">
+          <h3 class="worker-title" style="margin:0; flex:1;">
+            Workers & Attendance
+          </h3>
+          <button class="tool-btn" style="width:auto; padding:5px 10px;" onclick="renderWorkersView()">
+            Refresh
+          </button>
+        </div>
+        <div class="worker-stats-grid">
+          <div class="worker-stat">
+            <div class="worker-stat-title">
+              Total Workers
+            </div>
+            <div class="worker-stat-value" id="workersTotalCount">
+              0
+            </div>
+          </div>
+          <div class="worker-stat">
+            <div class="worker-stat-title">
+              Working Now
+            </div>
+            <div class="worker-stat-value" id="workersPresentToday">
+              0
+            </div>
+          </div>
+          <div class="worker-stat">
+            <div class="worker-stat-title">
+              Today's Hours
+            </div>
+            <div class="worker-stat-value" id="workersTodayHours">
+              0.00
+            </div>
+          </div>
+          <div class="worker-stat">
+            <div class="worker-stat-title">
+              Total Hours
+            </div>
+            <div class="worker-stat-value" id="workersTotalHours">
+              0.00
+            </div>
+
+          </div>
+        </div>
+        <div class="worker-section" id="passwordsManagerSection">
+          <h4>
+            🔑 Passwords Manager (Tux Admin Only)
+          </h4>
+          <table class="worker-summary-table">
+            <thead>
+              <tr>
+                <th>Role</th>
+                <th>Name</th>
+                <th>Password</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="passwordsManagerBody"></tbody>
+          </table>
+        </div>
+        <div class="worker-section">
+          <div style="
+              display:flex;
+              justify-content:space-between;
+              align-items:center;
+              margin-bottom:7px;
+            ">
+            <h4 style="margin:0;">
+              Workers Attendance History
+            </h4>
+            <button id="attendanceResetBtn" class="btn-save" style="
+                display:none;
+                padding:4px 8px;
+                font-size:9px;
+                background:#c0392b;
+              " onclick="resetAttendanceHistory()">
+              ♻ Reset Attendance History
+            </button>
+          </div>
+          <div id="selectedWorkerDetails">
+            <div class="empty-worker">
+              No workers added yet
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>

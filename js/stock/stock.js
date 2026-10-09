@@ -6,14 +6,41 @@
 
 
 /* =========================================================
+   STOCK PERMISSION HELPERS
+   ========================================================= */
+
+function canManageStock() {
+
+  return (
+    getActiveRole() === 'tuxadmin'
+  );
+
+}
+
+function requireStockManagementPermission() {
+
+  if (!canManageStock()) {
+
+    alert(
+      'View only - Only Tux Admin can edit the stock.'
+    );
+
+    return false;
+
+  }
+
+  return true;
+
+}
+
+
+/* =========================================================
    INVENTORY
    ========================================================= */
 
 async function openAddStockModal() {
 
-  if (getActiveRole() === 'admin') {
-
-    alert('View only - Admin cannot edit.');
+  if (!requireStockManagementPermission()) {
 
     return;
 
@@ -75,12 +102,18 @@ async function openAddStockModal() {
 
 function renderStockView() {
 
-  const tbody =
-    document.getElementById(
-      'stockTableBody'
-    );
+ const tbody =
+  document.getElementById(
+    'stockTableBody'
+  );
 
-  if (!tbody) return;
+if (
+  typeof renderCashierLowStockAlert === 'function'
+) {
+  renderCashierLowStockAlert();
+}
+
+if (!tbody) return;
 
   let html = '';
 
@@ -140,20 +173,30 @@ function renderStockView() {
 
         <td>
 
-          <button
-            onclick="deleteStockItem('${key}')"
-            style="
-              background: #c0392b;
-              color: white;
-              border: none;
-              padding: 4px 9px;
-              border-radius: 4px;
-              cursor: pointer;
-              font-size: 10px;
-            "
-          >
-            🗑️ Delete
-          </button>
+          ${
+            canManageStock()
+              ? `
+                <button
+                  onclick="deleteStockItem('${key}')"
+                  style="
+                    background: #c0392b;
+                    color: white;
+                    border: none;
+                    padding: 4px 9px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 10px;
+                  "
+                >
+                  🗑️ Delete
+                </button>
+              `
+              : `
+                <span style="color:#777; font-size:10px;">
+                  View only
+                </span>
+              `
+          }
 
         </td>
 
@@ -175,11 +218,7 @@ function renderStockView() {
 
 async function deleteStockItem(key) {
 
-  if (getActiveRole() === 'admin') {
-
-    alert(
-      'View only - Admin cannot edit.'
-    );
+  if (!requireStockManagementPermission()) {
 
     return;
 
@@ -260,7 +299,7 @@ function renderStockSettings() {
   if (!tbody) return;
 
   const isViewOnly =
-    getActiveRole() === 'admin';
+    !canManageStock();
 
   const dis =
     isViewOnly
@@ -370,11 +409,7 @@ async function updateStockSettings(
   key
 ) {
 
-  if (getActiveRole() === 'admin') {
-
-    alert(
-      'View only - Admin cannot edit.'
-    );
+  if (!requireStockManagementPermission()) {
 
     return;
 
@@ -524,11 +559,7 @@ function onExpenseItemSelect() {
 
 async function saveExpense() {
 
-  if (getActiveRole() === 'admin') {
-
-    alert(
-      'View only - Admin cannot edit.'
-    );
+  if (!requireStockManagementPermission()) {
 
     return;
 
@@ -917,20 +948,30 @@ function renderExpensesTable() {
 
           <td>
 
-            <button
-              onclick="deleteExpense('${exp.id}')"
-              style="
-                background: #c0392b;
-                color: white;
-                border: none;
-                padding: 4px 9px;
-                border-radius: 4px;
-                cursor: pointer;
-                font-size: 10px;
-              "
-            >
-              🗑️ Delete
-            </button>
+            ${
+              canManageStock()
+                ? `
+                  <button
+                    onclick="deleteExpense('${exp.id}')"
+                    style="
+                      background: #c0392b;
+                      color: white;
+                      border: none;
+                      padding: 4px 9px;
+                      border-radius: 4px;
+                      cursor: pointer;
+                      font-size: 10px;
+                    "
+                  >
+                    🗑️ Delete
+                  </button>
+                `
+                : `
+                  <span style="color:#777; font-size:10px;">
+                    View only
+                  </span>
+                `
+            }
 
           </td>
 
@@ -963,13 +1004,7 @@ async function deleteExpense(
   expenseId
 ) {
 
-  if (
-    getActiveRole() === 'admin'
-  ) {
-
-    alert(
-      'View only - Admin cannot edit.'
-    );
+  if (!requireStockManagementPermission()) {
 
     return;
 
@@ -1293,7 +1328,7 @@ function renderRecipeEditor() {
 
 
   const dis =
-    getActiveRole() === 'admin'
+    !canManageStock()
       ? 'disabled'
       : '';
 
@@ -1373,11 +1408,7 @@ function renderRecipeEditor() {
 
 async function saveRecipe() {
 
-  if (getActiveRole() === 'admin') {
-
-    alert(
-      'View only - Admin cannot edit.'
-    );
+  if (!requireStockManagementPermission()) {
 
     return;
 
@@ -1484,11 +1515,7 @@ async function saveRecipe() {
 
 async function resetRecipeToDefault() {
 
-  if (getActiveRole() === 'admin') {
-
-    alert(
-      'View only - Admin cannot edit.'
-    );
+  if (!requireStockManagementPermission()) {
 
     return;
 

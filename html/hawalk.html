@@ -1,0 +1,290 @@
+ <!-- =========================================================
+       HAWALK
+       ========================================================= -->
+  <div id="hawalk-view" class="view-section">
+    <div class="panel-box">
+<!-- HAWALK HEADER -->
+<div style="
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:8px;
+  ">
+  <div>
+    <h2 style="
+        color:#f1c40f;
+        margin:0;
+        font-size:14px;
+      ">
+      Hawalk
+    </h2>
+    <div style="
+        color:#888;
+        font-size:10px;
+        margin-top:3px;
+      ">
+      Stock request and approval system
+    </div>
+  </div>
+  <div style="
+      display:flex;
+      align-items:center;
+      gap:6px;
+    ">
+    <button
+      type="button"
+      class="tool-btn"
+      id="refreshHawalkBtn"
+      style="
+        width:auto;
+        padding:5px 10px;
+      "
+      onclick="refreshHawalk()"
+    >
+      🔄 Refresh
+    </button>
+    <button
+      type="button"
+      class="tool-btn"
+      id="deleteHawalkDataBtn"
+      style="
+        display:none;
+        width:auto;
+        padding:5px 10px;
+        background:#c0392b;
+        color:#fff;
+        border:none;
+      "
+      onclick="deleteAllHawalkData()"
+    >
+      🗑️ Delete Data
+    </button>
+  </div>
+</div>
+      <!-- =====================================================
+           WORKER HAWALK REQUEST PANEL
+           ===================================================== -->
+      <div
+        id="hawalkWorkerSection"
+        style="
+          background:#1c1c2b;
+          border:1px solid #8e44ad;
+          border-radius:6px;
+          padding:12px;
+          margin-bottom:10px;
+        "
+      >
+        <!-- PANEL TITLE -->
+        <div style="
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:8px;
+          "
+        >
+          <div>
+            <h3 style="
+                color:#d9a7ff;
+                margin:0;
+                font-size:13px;
+              "
+            >
+              📦 Request Stock
+            </h3>
+            <div style="
+                color:#888;
+                font-size:9px;
+                margin-top:4px;
+              "
+            >
+              Enter the quantity you want from each available stock item.
+              Stock will only be deducted after Admin accepts the request.
+            </div>
+          </div>
+        </div>
+        <!-- ===================================================
+             WORKER INPUT TABLE
+             =================================================== -->
+        <div style="
+            overflow-x:auto;
+            width:100%;
+          "
+        >
+          <table
+            class="expenses-table"
+            style="
+              width:100%;
+              min-width:600px;
+            "
+          >
+            <thead>
+              <tr>
+                <th style="
+                    width:35%;
+                    text-align:left;
+                  "
+                >
+                  Item Name
+                </th>
+
+                <th style="
+                    width:20%;
+                    text-align:center;
+                  "
+                >
+                  Available
+                </th>
+
+                <th style="
+                    width:25%;
+                    text-align:center;
+                  "
+                >
+                  Quantity to Request
+                </th>
+
+                <th style="
+                    width:20%;
+                    text-align:center;
+                  "
+                >
+                  Unit
+                </th>
+              </tr>
+            </thead>
+            <tbody id="hawalkStockRequestBody">
+              <tr>
+                <td
+                  colspan="4"
+                  style="
+                    text-align:center;
+                    color:#666;
+                    padding:20px;
+                  "
+                >
+                  Loading stock items...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- ===================================================
+             SUBMIT AREA
+             =================================================== -->
+        <div style="
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            gap:10px;
+            margin-top:10px;
+            flex-wrap:wrap;
+          "
+        >
+          <div style="
+              color:#777;
+              font-size:9px;
+            "
+          >
+            💡 You can request only quantities currently available in Stock.
+          </div>
+          <button
+            type="button"
+            class="btn-save"
+            id="submitHawalkRequestBtn"
+            onclick="submitHawalkRequest()"
+            style="
+              background:#8e44ad;
+              color:white;
+              padding:7px 14px;
+              font-size:10px;
+              font-weight:bold;
+              border:none;
+              border-radius:5px;
+            "
+          >
+            📦 Submit Hawalk Request
+          </button>
+        </div>
+      </div>
+      <!-- =====================================================
+           ADMIN HAWALK REQUESTS
+           ===================================================== -->
+      <div
+        id="hawalkAdminSection"
+        style="
+          background:#151522;
+          border:1px solid #8e44ad;
+          border-radius:6px;
+          padding:10px;
+        "
+      >
+        <div style="
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            margin-bottom:7px;
+          "
+        >
+          <div>
+            <h3 style="
+                color:#b97aff;
+                margin:0;
+                font-size:12px;
+              "
+            >
+              Hawalk Requests
+            </h3>
+            <div style="
+                color:#888;
+                font-size:9px;
+                margin-top:3px;
+              "
+            >
+              Admin approval is required before stock is deducted.
+            </div>
+          </div>
+        </div>
+        <!-- ADMIN REQUEST TABLE -->
+        <div style="
+            overflow-x:auto;
+          "
+        >
+          <table class="expenses-table">
+            <thead>
+              <tr>
+                <th>
+                  Date / Time
+                </th>
+                <th>
+                  Worker
+                </th>
+                <th>
+                  Requested Items
+                </th>
+                <th>
+                  Status
+                </th>
+                <th>
+                  Action
+                </th>
+              </tr>
+            </thead>
+            <tbody id="hawalkRequestsTableBody">
+              <tr>
+                <td
+                  colspan="5"
+                  style="
+                    text-align:center;
+                    color:#666;
+                    padding:20px;
+                  "
+                >
+                  No Hawalk requests yet
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>

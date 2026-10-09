@@ -307,6 +307,67 @@ function getKitchenExtraPrice(extra) {
 
 
 /* =========================================================
+   PAYMENT DISPLAY HELPER
+   DISPLAY ONLY — NO PAYMENT LOGIC
+   ========================================================= */
+
+function getKitchenPaymentMethod(ord) {
+
+  const payments = [];
+
+
+  const cash =
+    Number(ord.cashPaid || 0);
+
+
+  const visa =
+    Number(ord.visaPaid || 0);
+
+
+  const insta =
+    Number(ord.instaPaid || 0);
+
+
+  if (cash > 0) {
+
+    payments.push(
+      `Cash ${cash.toFixed(2)} LE`
+    );
+
+  }
+
+
+  if (visa > 0) {
+
+    payments.push(
+      `Visa ${visa.toFixed(2)} LE`
+    );
+
+  }
+
+
+  if (insta > 0) {
+
+    payments.push(
+      `InstaPay ${insta.toFixed(2)} LE`
+    );
+
+  }
+
+
+  if (payments.length === 0) {
+
+    return 'Not specified';
+
+  }
+
+
+  return payments.join(' + ');
+
+}
+
+
+/* =========================================================
    RENDER KITCHEN BOARD
    ========================================================= */
 
@@ -523,6 +584,12 @@ function renderKitchenBoard() {
         );
 
 
+      const paymentMethod =
+        getKitchenPaymentMethod(
+          ord
+        );
+
+
       html += `
 
         <div class="order-card ${statusClass}">
@@ -618,6 +685,82 @@ function renderKitchenBoard() {
               "
             >
               ${Number(ord.total || 0).toFixed(2)} LE
+            </strong>
+
+          </div>
+
+
+          ${
+            Number(ord.discount || 0) > 0
+              ? `
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 10px;
+                    margin-top: 8px;
+                    padding-top: 8px;
+                    border-top: 1px solid rgba(255,255,255,0.05);
+                  "
+                >
+
+                  <strong
+                    style="
+                      font-size: 13px;
+                      color: #bdbdbd;
+                    "
+                  >
+                    Discount
+                  </strong>
+
+
+                  <strong
+                    style="
+                      font-size: 13px;
+                      color: #e74c3c;
+                      white-space: nowrap;
+                    "
+                  >
+                    ${Number(ord.discount || 0).toFixed(2)} LE
+                  </strong>
+
+                </div>
+              `
+              : ''
+          }
+
+
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              gap: 10px;
+              margin-top: 8px;
+              padding-top: 8px;
+              border-top: 1px solid rgba(255,255,255,0.05);
+            "
+          >
+
+            <strong
+              style="
+                font-size: 13px;
+                color: #bdbdbd;
+              "
+            >
+              Payment
+            </strong>
+
+
+            <strong
+              style="
+                font-size: 13px;
+                color: #ffffff;
+                text-align: right;
+              "
+            >
+              ${paymentMethod}
             </strong>
 
           </div>

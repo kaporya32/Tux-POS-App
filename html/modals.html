@@ -1,0 +1,58 @@
+ <!-- =========================================================
+       STAFF LOGIN / LOGOUT MODAL
+       ========================================================= -->
+  <div class="staff-modal" id="staffLoginModal">
+    <div class="staff-modal-box">
+      <h3 id="staffModalTitle">
+        👤 Staff Login
+      </h3>
+      <div class="staff-modal-info" id="staffModalInfo">
+        Enter your staff password
+      </div>
+      <input type="password" id="staffPasswordInput" class="staff-password-input" placeholder="Enter password"
+        onkeydown="if(event.key === 'Enter') staffModalAction()">
+      <div class="staff-modal-buttons">
+        <button class="staff-modal-cancel" onclick="closeStaffLogin()">
+          Cancel
+        </button>
+        <button class="staff-modal-login" id="staffModalActionBtn" onclick="staffModalAction()">
+          Login
+        </button>
+      </div>
+    </div>
+  </div>
+    <!-- =========================================================
+       STOCK COUNT
+       ========================================================= -->
+  <!-- <div class="staff-modal" id="countModal">
+    <div class="staff-modal-box" style="
+        width:460px;
+        max-height:88vh;
+        overflow-y:auto;
+      ">
+      <h3 id="countModalTitle">
+        📋 Stock Count (Gard)
+      </h3>
+      <div class="staff-modal-info" id="countModalInfo">
+        Count what is physically in the shop and enter it. System quantities are hidden.
+      </div>
+      <table class="expenses-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Unit</th>
+            <th>Counted Qty</th>
+          </tr>
+        </thead>
+        <tbody id="countModalBody"></tbody>
+      </table>
+      <div class="staff-modal-buttons">
+        <button class="staff-modal-cancel" onclick="closeCountModal()">
+          Cancel
+        </button>
+        <button class="staff-modal-login" id="countModalSubmitBtn" onclick="submitCount()">
+          Save Count
+        </button>
+      </div>
+    </div>
+  </div> -->

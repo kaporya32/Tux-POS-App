@@ -1,7 +1,7 @@
 /* =========================================================
    TUX POS — SHARED STATE
-   All global data lives here. Loaded before every other
-   app script, so every file can read and change it.
+   All global data lives here.
+   Loaded before every other app script.
    ========================================================= */
 
 
@@ -9,6 +9,7 @@
    CURRENT ORDER / SALES
    ========================================================= */
 
+let hawalkRequests = [];
 let currentOrder = [];
 let kitchenOrders = [];
 let completedSales = [];
@@ -30,12 +31,10 @@ let currentShift = JSON.parse(
 
 
 /* =========================================================
-   MONTHLY BANK + OVERALL EXPENSES
+   MONTHLY FINANCE
    ========================================================= */
 
-let monthlyFinance = JSON.parse(
-  localStorage.getItem('tuxMonthlyFinance') || 'null'
-);
+let monthlyFinance = null;
 
 
 function getCurrentMonthKey() {
@@ -72,10 +71,46 @@ function ensureMonthlyFinance() {
 
     };
 
-    localStorage.setItem(
-      'tuxMonthlyFinance',
-      JSON.stringify(monthlyFinance)
-    );
+  }
+
+
+  if (
+    typeof monthlyFinance.monthKey !== 'string' ||
+    !monthlyFinance.monthKey
+  ) {
+
+    monthlyFinance.monthKey =
+      getCurrentMonthKey();
+
+  }
+
+
+  if (
+    typeof monthlyFinance.bank !== 'number'
+  ) {
+
+    monthlyFinance.bank =
+      Number(monthlyFinance.bank || 0);
+
+  }
+
+
+  if (
+    typeof monthlyFinance.overallExpenses !== 'number'
+  ) {
+
+    monthlyFinance.overallExpenses =
+      Number(monthlyFinance.overallExpenses || 0);
+
+  }
+
+
+  if (
+    typeof monthlyFinance.overallOrders !== 'number'
+  ) {
+
+    monthlyFinance.overallOrders =
+      Number(monthlyFinance.overallOrders || 0);
 
   }
 
@@ -87,10 +122,33 @@ function ensureMonthlyFinance() {
     monthlyFinance.hurryApp =
       Number(monthlyFinance.hurryApp || 0);
 
-    localStorage.setItem(
-      'tuxMonthlyFinance',
-      JSON.stringify(monthlyFinance)
-    );
+  }
+
+
+  if (
+    monthlyFinance.monthlyNetSales !== undefined &&
+    (
+      !monthlyFinance.bank ||
+      monthlyFinance.bank === 0
+    )
+  ) {
+
+    monthlyFinance.bank =
+      Number(
+        monthlyFinance.monthlyNetSales || 0
+      );
+
+  }
+
+
+  if (
+    Object.prototype.hasOwnProperty.call(
+      monthlyFinance,
+      'monthlyNetSales'
+    )
+  ) {
+
+    delete monthlyFinance.monthlyNetSales;
 
   }
 
@@ -101,41 +159,8 @@ ensureMonthlyFinance();
 
 
 /* =========================================================
-   BACKWARD COMPATIBILITY
+   ORDER COUNTER
    ========================================================= */
-
-if (
-  typeof monthlyFinance.overallOrders !== 'number'
-) {
-
-  monthlyFinance.overallOrders =
-    Number(monthlyFinance.overallOrders || 0);
-
-  localStorage.setItem(
-    'tuxMonthlyFinance',
-    JSON.stringify(monthlyFinance)
-  );
-
-}
-
-
-if (
-  monthlyFinance &&
-  typeof monthlyFinance.bank !== 'number'
-) {
-
-  monthlyFinance.bank =
-    Number(monthlyFinance.monthlyNetSales || 0);
-
-  delete monthlyFinance.monthlyNetSales;
-
-  localStorage.setItem(
-    'tuxMonthlyFinance',
-    JSON.stringify(monthlyFinance)
-  );
-
-}
-
 
 let orderCounter = Number(
   localStorage.getItem('tuxOrderCounter') || '1'
@@ -144,10 +169,6 @@ let orderCounter = Number(
 
 /* =========================================================
    PERMISSIONS / ROLES
-
-   worker   : Cashier + Kitchen Board only
-   admin    : all pages, VIEW ONLY
-   tuxadmin : all pages, full view + edit
    ========================================================= */
 
 const DEFAULT_TUX_ADMIN_PASSWORD =
@@ -171,23 +192,15 @@ let workersList = JSON.parse(
   localStorage.getItem('tuxWorkersList') || '[]'
 );
 
-
 let activeStaffIds = JSON.parse(
   localStorage.getItem('tuxActiveStaffIds') || '[]'
 );
-
 
 let staffModalMode = 'login';
 
 
 /* =========================================================
    MENU
-   SUPABASE IS NOW THE SOURCE OF TRUTH.
-   
-   These arrays are populated by:
-   
-   loadMenuFromSupabase()
-   loadExtrasFromSupabase()
    ========================================================= */
 
 let menuItems = {
@@ -229,6 +242,65 @@ const MENU_CATEGORY_LABELS = {
 };
 
 
+/* =========================================================
+   CATEGORY COLORS
+   ========================================================= */
+
+const DEFAULT_CATEGORY_COLORS = {
+
+  sandwiches: {
+    title: '#a8323a',
+    card: '#e5484d',
+    price: '#ff777c'
+  },
+
+  combos: {
+    title: '#a94f19',
+    card: '#e4772e',
+    price: '#ff9b58'
+  },
+
+  fries: {
+    title: '#b18a18',
+    card: '#e5b93f',
+    price: '#f5cf68'
+  },
+
+  hawawshi: {
+    title: '#75472d',
+    card: '#a96842',
+    price: '#d99468'
+  },
+
+  drinks: {
+    title: '#245f91',
+    card: '#3b9bd8',
+    price: '#6fc1f2'
+  },
+
+  dessert: {
+    title: '#85447e',
+    card: '#d866a8',
+    price: '#ed8ac1'
+  },
+
+  extras: {
+    title: '#85447e',
+    card: '#9b6cff',
+    price: '#b99aff'
+  }
+
+};
+
+
+let categoryColors =
+  JSON.parse(
+    JSON.stringify(
+      DEFAULT_CATEGORY_COLORS
+    )
+  );
+
+
 let draggedIndex = null;
 
 let draggedCategory = null;
@@ -238,254 +310,14 @@ let draggedCategory = null;
    STOCK
    ========================================================= */
 
-let stockInventory = {
-
-  meat: {
-    name: 'Meat',
-    unit: 'kg',
-    opening: 15.0,
-    current: 15.0,
-    min: 3.0
-  },
-
-  fries: {
-    name: 'Fries',
-    unit: 'kg',
-    opening: 60.0,
-    current: 60.0,
-    min: 10.0
-  },
-
-  buns: {
-    name: 'Mac Bun',
-    unit: 'pcs',
-    opening: 250,
-    current: 250,
-    min: 50
-  },
-
-  soda: {
-    name: 'Soda',
-    unit: 'can',
-    opening: 100,
-    current: 100,
-    min: 20
-  },
-
-  bacon: {
-    name: 'Bacon',
-    unit: 'slice',
-    opening: 80,
-    current: 80,
-    min: 15
-  },
-
-  water: {
-    name: 'Water',
-    unit: 'bottle',
-    opening: 120,
-    current: 120,
-    min: 25
-  },
-
-  cheese: {
-    name: 'American Cheese',
-    unit: 'slice',
-    opening: 350,
-    current: 350,
-    min: 70
-  }
-
-};
+let stockInventory = {};
 
 
 /* =========================================================
    RECIPES
-   Stock deduction per menu item.
-   Amounts use the stock item's own unit.
    ========================================================= */
 
-const DEFAULT_RECIPES = {
-
-  'Single Smashed Patty': {
-    meat: 0.1,
-    buns: 1,
-    fries: 0.14
-  },
-
-  'Double Smashed Patty': {
-    meat: 0.2,
-    buns: 1,
-    fries: 0.14
-  },
-
-  'Triple Smashed Patty': {
-    meat: 0.3,
-    buns: 1,
-    fries: 0.14
-  },
-
-  'Quatro Smashed Patty': {
-    meat: 0.4,
-    buns: 1,
-    fries: 0.14
-  },
-
-  'Single Tuxify': {
-    meat: 0.1,
-    buns: 1,
-    cheese: 1,
-    fries: 0.14
-  },
-
-  'Double Tuxify': {
-    meat: 0.2,
-    buns: 1,
-    cheese: 2,
-    fries: 0.14
-  },
-
-  'Triple Tuxify': {
-    meat: 0.3,
-    buns: 1,
-    cheese: 3,
-    fries: 0.14
-  },
-
-  'Quatro Tuxify': {
-    meat: 0.4,
-    buns: 1,
-    cheese: 4,
-    fries: 0.14
-  },
-
-  "Johnny's 2 Large Smashed": {
-    meat: 0.4,
-    buns: 2,
-    fries: 0.28
-  },
-
-
-  'single double b': {
-    meat: 0.2,
-    soda: 1,
-    fries: 0.2,
-    buns: 1
-  },
-
-  'Double Double': {
-    meat: 0.5,
-    cheese: 4,
-    soda: 2,
-    buns: 2,
-    fries: 0.4
-  },
-
-  'Twowawshi': {
-    meat: 0.24,
-    soda: 2
-  },
-
-  'QuadTower': {
-    meat: 0.9,
-    cheese: 8,
-    soda: 2,
-    buns: 2,
-    fries: 0.4
-  },
-
-  'Quad 4': {
-    meat: 1.2,
-    buns: 4,
-    cheese: 12,
-    soda: 4,
-    fries: 0.56
-  },
-
-
-  'Tux Fries': {
-    fries: 0.2,
-    meat: 0.05
-  },
-
-  'Doppy Fries': {
-    fries: 0.2,
-    meat: 0.05,
-    bacon: 1
-  },
-
-  'Classic Fries': {
-    fries: 0.14
-  },
-
-  'Potato Wedges': {
-    fries: 0.14
-  },
-
-  'Cheese Fries': {
-    fries: 0.14
-  },
-
-  'Chili Fries': {
-    fries: 0.14
-  },
-
-  'Extra Tux Fries': {
-    fries: 0.06,
-    meat: 0.05
-  },
-
-  'Extra Doppy Fries': {
-    fries: 0.06,
-    meat: 0.05,
-    bacon: 1
-  },
-
-  'Extra Wedges': {
-    fries: 0.14
-  },
-
-
-  'Classic Hawawshi': {
-    meat: 0.12
-  },
-
-  'Tux Hawawshi': {
-    meat: 0.12
-  },
-
-
-  'Soda': {
-    soda: 1
-  },
-
-  'Water': {
-    water: 1
-  },
-
-
-  'Cheese': {
-    cheese: 1
-  },
-
-  'Bacon': {
-    bacon: 1
-  },
-
-  'Extra Smashed Patty': {
-    meat: 0.1
-  },
-
-  'Extra Bun': {
-    buns: 1
-  }
-
-};
-
-
-let recipes = JSON.parse(
-  JSON.stringify(DEFAULT_RECIPES)
-);
+let recipes = {};
 
 
 /* =========================================================
@@ -494,4 +326,4 @@ let recipes = JSON.parse(
 
 let visiblePasswordKeys = {};
 
-let countModalMode = 'start';
+let countModalMode = 'start'; 

@@ -6,6 +6,21 @@
 
 
 /* =========================================================
+   RESTRICTED VIEWS
+   Worker cannot access these pages.
+   Stock and Hawalk are intentionally excluded.
+   ========================================================= */
+
+const RESTRICTED_VIEWS = [
+  'expenses',
+  'sales',
+  'workers',
+  'gamiya',
+  'settings'
+];
+
+
+/* =========================================================
    PAGE NAVIGATION
    ========================================================= */
 
@@ -14,7 +29,21 @@ function switchView(
   btnElement
 ) {
 
+  /*
+   * STOCK is intentionally accessible to:
+   * Worker      → View only
+   * Admin       → View only
+   * Tux Admin   → Full control
+   *
+   * HAWALK is intentionally accessible to:
+   * Worker      → Request stock
+   * Admin       → Approve / Decline
+   * Tux Admin   → Approve / Decline
+   */
+
   if (
+    viewName !== 'stock' &&
+    viewName !== 'hawalk' &&
     RESTRICTED_VIEWS.includes(viewName) &&
     getActiveRole() === 'worker'
   ) {
@@ -93,6 +122,12 @@ function switchView(
 
   }
 
+  else if (viewName === 'hawalk') {
+
+    renderHawalkView();
+
+  }
+
   else if (viewName === 'workers') {
 
     renderWorkersView();
@@ -111,8 +146,9 @@ function switchView(
 
     populateRecipeItemSelect();
 
-  }
+    renderCategoryColorsSettings();
 
+  }
 
 }
 
@@ -239,6 +275,113 @@ window.addEventListener(
 
 
 /* =========================================================
+   STOCK REALTIME UI UPDATE
+   ========================================================= */
+
+window.addEventListener(
+  'tux-stock-realtime-updated',
+  function () {
+
+    console.log(
+      'TUX POS — Stock UI updated from realtime.'
+    );
+
+
+    if (
+      typeof renderStockView === 'function'
+    ) {
+
+      renderStockView();
+
+    }
+
+
+    if (
+      typeof renderStockSettings === 'function'
+    ) {
+
+      renderStockSettings();
+
+    }
+
+
+    if (
+      typeof populateRecipeItemSelect === 'function'
+    ) {
+
+      populateRecipeItemSelect();
+
+    }
+
+
+    if (
+      typeof renderHawalkView === 'function'
+    ) {
+
+      const hawalkView =
+        document.getElementById(
+          'hawalk-view'
+        );
+
+
+      if (
+        hawalkView &&
+        hawalkView.classList.contains(
+          'active'
+        )
+      ) {
+
+        renderHawalkView();
+
+      }
+
+    }
+
+  }
+);
+
+
+/* =========================================================
+   HAWALK REALTIME UI UPDATE
+   ========================================================= */
+
+window.addEventListener(
+  'tux-hawalk-updated',
+  function () {
+
+    console.log(
+      'TUX POS — Hawalk UI updated from realtime.'
+    );
+
+
+    if (
+      typeof renderHawalkView === 'function'
+    ) {
+
+      const hawalkView =
+        document.getElementById(
+          'hawalk-view'
+        );
+
+
+      if (
+        hawalkView &&
+        hawalkView.classList.contains(
+          'active'
+        )
+      ) {
+
+        renderHawalkView();
+
+      }
+
+    }
+
+  }
+);
+
+
+/* =========================================================
    APPLICATION STARTUP
    ========================================================= */
 
@@ -352,6 +495,35 @@ async function initializeApp() {
 
 
     /* =====================================================
+       CATEGORY COLORS
+       ===================================================== */
+
+    console.log(
+      'TUX POS — Loading category colors from Supabase...'
+    );
+
+
+    await loadCategoryColors();
+
+
+    console.log(
+      'TUX POS — Category colors loaded.'
+    );
+
+
+    /* =====================================================
+       START CATEGORY COLORS REALTIME
+       ===================================================== */
+
+    console.log(
+      'TUX POS — Starting category colors realtime...'
+    );
+
+
+    initializeCategoryColorsRealtime();
+
+
+    /* =====================================================
        SHIFT
        ===================================================== */
 
@@ -426,6 +598,36 @@ async function initializeApp() {
 
 
     startStockRealtime();
+
+
+    /* =====================================================
+       HAWALK
+       ===================================================== */
+
+    console.log(
+      'TUX POS — Loading Hawalk requests from Supabase...'
+    );
+
+
+    await loadHawalkRequestsFromSupabase();
+
+
+    console.log(
+      'TUX POS — Hawalk requests loaded:',
+      getHawalkRequests()
+    );
+
+
+    /* =====================================================
+       START HAWALK REALTIME
+       ===================================================== */
+
+    console.log(
+      'TUX POS — Starting Hawalk realtime...'
+    );
+
+
+    startHawalkRealtime();
 
 
     /* =====================================================
@@ -578,6 +780,14 @@ async function initializeApp() {
 
     applyRolePermissions();
 
+    applyHawalkRoleUI();
+
+    renderHawalkView();
+
+    renderCategoryColorsSettings();
+
+    applyCategoryColorsToMenu();
+
 
     /* =====================================================
        LIVE CLOCK
@@ -614,6 +824,24 @@ async function initializeApp() {
         }
 
 
+        const hawalkView =
+          document.getElementById(
+            'hawalk-view'
+          );
+
+
+        if (
+          hawalkView &&
+          hawalkView.classList.contains(
+            'active'
+          )
+        ) {
+
+          renderHawalkView();
+
+        }
+
+
         updateStaffUI();
 
       },
@@ -646,9 +874,13 @@ async function initializeApp() {
 
 /* =========================================================
    START APPLICATION
+   Supports dynamically loaded main.js.
    ========================================================= */
 
-window.addEventListener(
-  'load',
-  initializeApp
-);
+if (document.readyState === 'complete') {
+  initializeApp();
+} else {
+  window.addEventListener('load', initializeApp, {
+    once: true
+  });
+}

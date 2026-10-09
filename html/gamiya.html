@@ -1,0 +1,98 @@
+<!-- =========================================================
+       GAM3YA
+       ========================================================= -->
+  <div id="gamiya-view" class="view-section">
+    <div class="panel-box">
+      <h2 style="
+          color:#f1c40f;
+          margin-top:0;
+          font-size:14px;
+        ">
+        Gam3ya - Staff Meals (Not Counted in Sales)
+      </h2>
+      <div style="
+          display:flex;
+          align-items:center;
+          gap:6px;
+          margin-bottom:8px;
+        ">
+        <span style="
+            font-size:10px;
+            color:#aaa;
+            font-weight:bold;
+          ">
+          Worker:
+        </span>
+        <select id="gamiyaWorkerFilter" onchange="renderGamiyaView()" style="
+            padding:6px;
+            background:#0c0c14;
+            border:1px solid #28283d;
+            border-radius:4px;
+            color:#fff;
+            font-size:10px;
+          ">
+          <option value="all">
+            All Workers
+          </option>
+        </select>
+        <button id="gamiyaResetBtn" class="btn-save" style="
+            display:none;
+            padding:5px 10px;
+            font-size:10px;
+            background:#c0392b;
+            margin-left:auto;
+          " onclick="resetGamiya()">
+          ♻ Reset Gam3ya
+        </button>
+      </div>
+      <div class="stats-grid" style="grid-template-columns:repeat(3, 1fr);">
+
+        <div class="stat-card">
+
+          <h4>
+            Total Gam3ya Orders
+          </h4>
+
+          <span id="gamiyaTotalOrders">
+            0
+          </span>
+        </div>
+        <div class="stat-card">
+          <h4>
+            Total Items Eaten
+          </h4>
+          <span id="gamiyaTotalItems">
+            0
+          </span>
+        </div>
+        <div class="stat-card" style="border-color:#16a085;">
+          <h4>
+            Total Value (LE, deducted from stock)
+          </h4>
+          <span id="gamiyaTotalValue" style="color:#16a085;">
+            0.00 LE
+          </span>
+        </div>
+      </div>
+      <table class="expenses-table">
+        <thead>
+          <tr>
+            <th>Date/Time</th>
+            <th>Worker</th>
+            <th>Items</th>
+            <th>Value (LE)</th>
+          </tr>
+        </thead>
+        <tbody id="gamiyaTableBody">
+          <tr>
+            <td colspan="4" style="
+                text-align:center;
+                color:#666;
+              ">
+              No staff meals recorded yet
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>

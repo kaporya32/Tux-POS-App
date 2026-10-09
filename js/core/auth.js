@@ -1,842 +1,1198 @@
+
 /* =========================================================
-   TUX POS — AUTH, ROLES AND STAFF LOGIN
-
-   ROLES:
-
-     WORKER
-       - Cashier
-       - Kitchen
-       - Normal operational access
-
-     ADMIN
-       - Spectate / read-only mode
-       - Can see all available screens
-       - Cannot edit, add, delete, reset, or change settings
-
-     TUX ADMIN
-       - Full access
-       - Can edit everything
-       - Can manage Admin account
-       - Can manage Tux Admin settings
-
-   WORKERS + ATTENDANCE:
-     - Workers are stored in Supabase.
-     - Attendance is stored in Supabase.
-     - Tux Admin / Admin login sessions remain local
-       to the browser/tab.
-
-   LOGIN SESSION:
-     - Login survives page refresh.
-     - Passwords are NOT stored in the login session.
-     - Supabase attendance remains the source of truth
-       for attendance records.
-     - Login session uses sessionStorage so each browser
-       tab keeps its own independent login.
+   TUX POS — AUTH / ROLES / STAFF LOGIN
+   Shared session version and nightly logout support
    ========================================================= */
 
 
 /* =========================================================
-   RESTRICTED VIEWS
+   SHARED SESSION CONFIGURATION
    ========================================================= */
 
-const RESTRICTED_VIEWS = [
-  'expenses',
-  'sales',
-  'stock',
-  'workers',
-  'gamiya',
-  'settings'
-];
-
-
-const RESTRICTED_NAV_IDS = [
-  'navExpenses',
-  'navSales',
-  'navStock',
-  'navWorkers',
-  'navGamiya',
-  'navSettings'
-];
+const TUX_SESSION_VERSION_KEY = 'tuxSessionVersion';
+const TUX_SESSION_CHECK_INTERVAL = 15000;
 
 
 /* =========================================================
-   LOGIN SESSION STORAGE KEY
+   ROLE HELPERS
    ========================================================= */
 
-const AUTH_SESSION_STORAGE_KEY =
-  'tuxPosLoginSession';
+function getActiveRole() {
+  if (tuxAdminActive === true) return 'tuxadmin';
+  if (adminActive === true) return 'admin';
 
+  if (
+    Array.isArray(activeStaffIds) &&
+    activeStaffIds.length > 0
+  ) {
+    return 'worker';
+  }
 
-/* =========================================================
-   TUX ADMIN PASSWORD
-   ========================================================= */
+  return null;
+}
 
-function getTuxAdminPassword() {
+function isTuxAdmin() {
+  return tuxAdminActive === true;
+}
 
-  return (
-    localStorage.getItem('tuxAdminPassword') ||
-    DEFAULT_TUX_ADMIN_PASSWORD
-  );
+function isAdminSpectateMode() {
+  return adminActive === true && tuxAdminActive !== true;
+}
 
+function canEdit() {
+  const role = getActiveRole();
+  return role === 'tuxadmin' || role === 'worker';
+}
+
+function canEditAdminReports() {
+  return tuxAdminActive === true || adminActive === true;
+}
+
+function isWorkerLoggedIn() {
+  return getActiveRole() === 'worker';
 }
 
 
 /* =========================================================
-   SAVE LOGIN SESSION
+   LOGGED-OUT NAVBAR VISIBILITY
+   Keep ONLY Staff Login visible when nobody is logged in.
+   Uses the actual classes and IDs in navbar.html.
+   ========================================================= */
 
-   sessionStorage is used intentionally.
+function ensureTuxNavbarVisibilityStyles() {
+  if (document.getElementById('tuxNavbarVisibilityStyles')) {
+    return;
+  }
 
-   This means:
+  const style = document.createElement('style');
+  style.id = 'tuxNavbarVisibilityStyles';
 
-     Tab A = its own login
-     Tab B = its own login
-     Tab C = its own login
+  style.textContent = `
+    .top-nav.tux-logged-out .nav-brand,
+    .top-nav.tux-logged-out .nav-tabs > .nav-btn,
+    .top-nav.tux-logged-out .shift-controls,
+    .top-nav.tux-logged-out .nav-clock,
+    .top-nav.tux-logged-out #staffStatus,
+    .top-nav.tux-logged-out #staffLogoutBtn {
+      display: none !important;
+    }
 
-   Logging in on one tab does NOT change the login
-   session of another tab.
+    .top-nav.tux-logged-out #staffLoginBtn {
+      display: inline-block !important;
+      visibility: visible !important;
+    }
 
-   IMPORTANT:
+    .top-nav.tux-logged-out .staff-login-box {
+      display: flex !important;
+      visibility: visible !important;
+      align-items: center;
+    }
 
-   activeStaffIds is also stored in this tab's
-   sessionStorage.
+    .top-nav.tux-logged-out .nav-tabs {
+      display: flex !important;
+      visibility: visible !important;
+      justify-content: flex-end;
+      width: 100%;
+    }
+  `;
 
-   Therefore a Worker can be remembered while the
-   tab temporarily switches to Admin/Tux Admin.
+  document.head.appendChild(style);
+}
+
+
+function updateTuxNavbarVisibility() {
+  ensureTuxNavbarVisibilityStyles();
+
+  const navbar = document.querySelector('.top-nav');
+
+  if (!navbar) {
+    console.warn(
+      'TUX POS — Could not find .top-nav in navbar.html.'
+    );
+    return;
+  }
+
+  const loggedIn = getActiveRole() !== null;
+
+  navbar.classList.toggle(
+    'tux-logged-out',
+    !loggedIn
+  );
+}
+
+
+/* =========================================================
+   SHARED SESSION VERSION — SUPABASE
+   ========================================================= */
+
+async function getTuxSharedSessionVersion() {
+  if (
+    typeof supabaseClient === 'undefined' ||
+    !supabaseClient
+  ) {
+    throw new Error('Supabase client is unavailable.');
+  }
+
+  const { data, error } =
+    await supabaseClient.rpc('get_tux_session_version');
+
+  if (error) throw error;
+
+  if (data === null || data === undefined) {
+    throw new Error(
+      'Supabase returned an empty session version.'
+    );
+  }
+
+  return String(data);
+}
+
+
+/* =========================================================
+   SAVE SHARED SESSION VERSION AFTER LOGIN
+   ========================================================= */
+
+async function stampTuxSessionVersionAfterLogin() {
+  const version = await getTuxSharedSessionVersion();
+
+  sessionStorage.setItem(
+    TUX_SESSION_VERSION_KEY,
+    version
+  );
+
+  return version;
+}
+
+
+/* =========================================================
+   CLEAR LOCAL LOGIN
+   ========================================================= */
+
+function clearTuxLocalLogin(options = {}) {
+  const shouldReload = options.reload !== false;
+
+  tuxAdminActive = false;
+  adminActive = false;
+  activeStaffIds = [];
+
+  try {
+    sessionStorage.removeItem('tuxTuxAdminActive');
+    sessionStorage.removeItem('tuxAdminActive');
+    sessionStorage.removeItem('tuxActiveStaffIds');
+    sessionStorage.removeItem(TUX_SESSION_VERSION_KEY);
+  } catch (error) {
+    console.error(
+      'TUX POS — Failed to clear session storage:',
+      error
+    );
+  }
+
+  updateStaffUI();
+
+  if (typeof applyRolePermissions === 'function') {
+    applyRolePermissions();
+  }
+
+  if (shouldReload && typeof window !== 'undefined') {
+    window.location.reload();
+  }
+}
+
+
+/* =========================================================
+   VALIDATE RESTORED SESSION
+   ========================================================= */
+
+async function validateTuxRestoredSession() {
+  const hasLocalLogin =
+    tuxAdminActive === true ||
+    adminActive === true ||
+    (
+      Array.isArray(activeStaffIds) &&
+      activeStaffIds.length > 0
+    );
+
+  if (!hasLocalLogin) return true;
+
+  let savedVersion = null;
+
+  try {
+    savedVersion = sessionStorage.getItem(
+      TUX_SESSION_VERSION_KEY
+    );
+  } catch (error) {
+    console.error(
+      'TUX POS — Could not read the saved session version:',
+      error
+    );
+  }
+
+  if (!savedVersion) {
+    console.warn(
+      'TUX POS — Saved login has no shared session version. Logging out.'
+    );
+
+    clearTuxLocalLogin();
+    return false;
+  }
+
+  try {
+    const currentVersion =
+      await getTuxSharedSessionVersion();
+
+    if (String(savedVersion) !== String(currentVersion)) {
+      console.warn(
+        'TUX POS — Shared session changed. Logging out.'
+      );
+
+      clearTuxLocalLogin();
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error(
+      'TUX POS — Could not validate the shared session:',
+      error
+    );
+
+    return false;
+  }
+}
+
+
+/* =========================================================
+   SHARED SESSION WATCHER
+   ========================================================= */
+
+async function checkTuxSharedSessionVersion() {
+  const hasLocalLogin =
+    tuxAdminActive === true ||
+    adminActive === true ||
+    (
+      Array.isArray(activeStaffIds) &&
+      activeStaffIds.length > 0
+    );
+
+  if (!hasLocalLogin) return;
+
+  if (window.tuxSessionCheckInProgress === true) {
+    return;
+  }
+
+  window.tuxSessionCheckInProgress = true;
+
+  try {
+    const savedVersion = sessionStorage.getItem(
+      TUX_SESSION_VERSION_KEY
+    );
+
+    if (!savedVersion) {
+      clearTuxLocalLogin();
+      return;
+    }
+
+    const currentVersion =
+      await getTuxSharedSessionVersion();
+
+    if (String(savedVersion) !== String(currentVersion)) {
+      console.warn(
+        'TUX POS — Nightly session reset detected.'
+      );
+
+      clearTuxLocalLogin();
+      return;
+    }
+  } catch (error) {
+    console.error(
+      'TUX POS — Shared session check failed:',
+      error
+    );
+  } finally {
+    window.tuxSessionCheckInProgress = false;
+  }
+}
+
+
+function startTuxSharedSessionWatcher() {
+  if (window.tuxSharedSessionWatcher) return;
+
+  void checkTuxSharedSessionVersion();
+
+  window.tuxSharedSessionWatcher =
+    window.setInterval(function () {
+      void checkTuxSharedSessionVersion();
+    }, TUX_SESSION_CHECK_INTERVAL);
+}
+
+
+/* =========================================================
+   LOGIN SESSION
    ========================================================= */
 
 function saveLoginSession() {
+  try {
+    sessionStorage.setItem(
+      'tuxTuxAdminActive',
+      tuxAdminActive ? 'true' : 'false'
+    );
 
-  const session = {
+    sessionStorage.setItem(
+      'tuxAdminActive',
+      adminActive ? 'true' : 'false'
+    );
 
-    tuxAdminActive:
-      Boolean(tuxAdminActive),
-
-    adminActive:
-      Boolean(adminActive),
-
-    activeStaffIds:
-      Array.isArray(activeStaffIds)
-        ? activeStaffIds.map(function (id) {
-
-            return String(id);
-
-          })
-        : []
-
-  };
-
-
-  sessionStorage.setItem(
-    AUTH_SESSION_STORAGE_KEY,
-    JSON.stringify(session)
-  );
-
-}
-
-
-/* =========================================================
-   CLEAR LOGIN SESSION
-   ========================================================= */
-
-function clearLoginSession() {
-
-  sessionStorage.removeItem(
-    AUTH_SESSION_STORAGE_KEY
-  );
-
-}
-
-
-/* =========================================================
-   CHECK WHETHER WORKER HAS OPEN ATTENDANCE
-
-   Kept for attendance-related functionality.
-
-   IMPORTANT:
-   This function is NOT used to decide whether the
-   browser/tab should remember a Worker login.
-   ========================================================= */
-
-function workerHasOpenAttendance(worker) {
-
-  if (
-    !worker ||
-    !Array.isArray(worker.attendance)
-  ) {
-
-    return false;
-
+    sessionStorage.setItem(
+      'tuxActiveStaffIds',
+      JSON.stringify(
+        Array.isArray(activeStaffIds)
+          ? activeStaffIds
+          : []
+      )
+    );
+  } catch (error) {
+    console.error(
+      'TUX POS — Failed to save login session:',
+      error
+    );
   }
-
-
-  return worker.attendance.some(
-    function (record) {
-
-      return (
-        record &&
-        record.checkIn &&
-        !record.checkOut &&
-        record.status === 'working'
-      );
-
-    }
-  );
-
 }
 
 
 /* =========================================================
    RESTORE LOGIN SESSION
-
-   IMPORTANT:
-
-   The login session belongs to THIS browser tab.
-
-   Worker login is restored from sessionStorage.
-
-   We DO NOT validate the Worker login against
-   Supabase attendance here.
-
-   Attendance is shared between browsers/tabs, while
-   login session is private to this browser tab.
-
-   This prevents:
-
-     Tab A = Worker
-     Tab B = Admin
-
-   from causing Tab A's Worker login to disappear.
-
-   It also allows:
-
-     Tab B = Worker
-     Tab B = Tux Admin
-     Tab B = Admin
-     Tab B = Logout
-     Tab B = Worker again
    ========================================================= */
 
-async function restoreLoginSession() {
-
+function restoreLoginSession() {
   try {
+    const savedTuxAdmin =
+      sessionStorage.getItem('tuxTuxAdminActive');
 
-    const saved =
-      sessionStorage.getItem(
-        AUTH_SESSION_STORAGE_KEY
-      );
+    const savedAdmin =
+      sessionStorage.getItem('tuxAdminActive');
 
+    const savedStaffIds =
+      sessionStorage.getItem('tuxActiveStaffIds');
 
-    /* =====================================================
-       NO LOGIN SAVED IN THIS TAB
-       ===================================================== */
+    tuxAdminActive = savedTuxAdmin === 'true';
+    adminActive = savedAdmin === 'true';
 
-    if (!saved) {
+    let restoredStaffIds = [];
 
-      tuxAdminActive = false;
+    if (savedStaffIds) {
+      try {
+        const parsed = JSON.parse(savedStaffIds);
 
-      adminActive = false;
-
-      activeStaffIds = [];
-
-      return;
-
+        if (Array.isArray(parsed)) {
+          restoredStaffIds = parsed;
+        }
+      } catch (error) {
+        console.warn(
+          'TUX POS — Invalid saved staff session:',
+          error
+        );
+      }
     }
 
-
-    const session =
-      JSON.parse(saved);
-
-
-    if (
-      !session ||
-      typeof session !== 'object'
-    ) {
-
-      throw new Error(
-        'Invalid saved login session.'
-      );
-
-    }
-
-
-    /* =====================================================
-       RESTORE TUX ADMIN
-       ===================================================== */
-
-    tuxAdminActive =
-      session.tuxAdminActive === true;
-
-
-    /* =====================================================
-       RESTORE ADMIN
-       ===================================================== */
-
-    adminActive =
-      session.adminActive === true &&
-      Boolean(adminAccount);
-
-
-    /*
-     * Tux Admin always has priority.
-     */
-
-    if (tuxAdminActive) {
-
-      adminActive = false;
-
-    }
-
-
-    /* =====================================================
-       RESTORE WORKERS
-
-       IMPORTANT:
-
-       Do NOT check Supabase attendance here.
-
-       The Worker login belongs to this tab.
-
-       Supabase attendance is shared data and must not
-       erase this tab's login during page refresh.
-       ===================================================== */
-
-    const savedWorkerIds =
-      Array.isArray(session.activeStaffIds)
-        ? session.activeStaffIds
+    const validWorkerIds =
+      Array.isArray(workersList)
+        ? workersList.map(worker => String(worker.id))
         : [];
 
+    activeStaffIds = restoredStaffIds
+      .map(id => String(id))
+      .filter(id => validWorkerIds.includes(id));
 
-    activeStaffIds =
-      savedWorkerIds
-        .map(function (id) {
-
-          return String(id);
-
-        })
-        .filter(function (id) {
-
-          return workersList.some(
-            function (worker) {
-
-              return (
-                String(worker.id) ===
-                String(id)
-              );
-
-            }
-          );
-
-        });
-
-
-    /* =====================================================
-       SAVE CLEANED SESSION
-       ===================================================== */
-
-    if (
-      tuxAdminActive ||
-      adminActive ||
-      activeStaffIds.length > 0
-    ) {
-
-      saveLoginSession();
-
+    if (tuxAdminActive) {
+      adminActive = false;
     }
 
-    else {
-
-      clearLoginSession();
-
+    if (!Array.isArray(activeStaffIds)) {
+      activeStaffIds = [];
     }
 
+    saveLoginSession();
+    updateStaffUI();
+
+    if (typeof updateStaffStatus === 'function') {
+      updateStaffStatus();
+    }
 
     console.log(
       'TUX POS — Login session restored:',
       {
-        tuxAdminActive:
-          tuxAdminActive,
-
-        adminActive:
-          adminActive,
-
-        activeStaffIds:
-          activeStaffIds
+        role: getActiveRole(),
+        tuxAdminActive,
+        adminActive,
+        activeStaffIds
       }
     );
 
-
+    void validateTuxRestoredSession();
   } catch (error) {
-
     console.error(
       'TUX POS — Failed to restore login session:',
       error
     );
 
-
     tuxAdminActive = false;
-
     adminActive = false;
-
     activeStaffIds = [];
 
+    try {
+      saveLoginSession();
+    } catch (saveError) {
+      console.error(
+        'TUX POS — Failed to reset login session:',
+        saveError
+      );
+    }
 
-    clearLoginSession();
-
+    updateStaffUI();
   }
-
 }
 
 
 /* =========================================================
-   ACTIVE ROLE
+   STAFF LOGIN MODAL
    ========================================================= */
 
-function getActiveRole() {
+function openStaffLogin() {
+  staffModalMode = 'login';
+
+  const modal = document.getElementById('staffLoginModal');
+  const title = document.getElementById('staffModalTitle');
+  const info = document.getElementById('staffModalInfo');
+  const input = document.getElementById('staffPasswordInput');
+  const actionButton = document.getElementById('staffModalActionBtn');
+
+  if (title) title.textContent = '👤 Staff Login';
+  if (info) info.textContent = 'Enter your staff password';
+  if (input) input.value = '';
+  if (actionButton) actionButton.textContent = 'Login';
+  if (modal) modal.style.display = 'flex';
+
+  setTimeout(function () {
+    if (input) input.focus();
+  }, 50);
+}
+
+
+/* =========================================================
+   STAFF LOGOUT MODAL
+   ========================================================= */
+
+function openStaffLogout() {
+  staffModalMode = 'logout';
+
+  const modal = document.getElementById('staffLoginModal');
+  const title = document.getElementById('staffModalTitle');
+  const info = document.getElementById('staffModalInfo');
+  const input = document.getElementById('staffPasswordInput');
+  const actionButton = document.getElementById('staffModalActionBtn');
+
+  if (title) title.textContent = '🚪 Staff Logout';
+  if (info) info.textContent = 'Enter your password to logout';
+  if (input) input.value = '';
+  if (actionButton) actionButton.textContent = 'Logout';
+  if (modal) modal.style.display = 'flex';
+
+  setTimeout(function () {
+    if (input) input.focus();
+  }, 50);
+}
+
+
+/* =========================================================
+   CLOSE LOGIN / LOGOUT MODAL
+   ========================================================= */
+
+function closeStaffLogin() {
+  const modal = document.getElementById('staffLoginModal');
+  const input = document.getElementById('staffPasswordInput');
+
+  if (input) input.value = '';
+  if (modal) modal.style.display = 'none';
+}
+
+
+/* =========================================================
+   STAFF MODAL ACTION
+   ========================================================= */
+
+async function staffModalAction() {
+  const input = document.getElementById('staffPasswordInput');
+
+  const password = input
+    ? String(input.value || '').trim()
+    : '';
+
+  if (!password) {
+    alert(
+      staffModalMode === 'logout'
+        ? 'Please enter your password.'
+        : 'Please enter your staff password.'
+    );
+
+    return;
+  }
+
+  try {
+    if (staffModalMode === 'logout') {
+      staffLogout(password);
+    } else {
+      await staffLogin(password);
+    }
+  } catch (error) {
+    console.error(
+      'TUX POS — Login action failed:',
+      error
+    );
+
+    alert(
+      'The login action could not be completed. Please try again.'
+    );
+  }
+}
+
+
+/* =========================================================
+   STAFF LOGIN
+   ========================================================= */
+
+async function staffLogin(password) {
+  const enteredPassword = String(password || '').trim();
+
+  if (!enteredPassword) {
+    alert('Please enter your password.');
+    return;
+  }
+
+  /*
+     TUX ADMIN
+  */
+
+  const tuxPassword =
+    adminAccount && adminAccount.tuxPassword
+      ? String(adminAccount.tuxPassword)
+      : DEFAULT_TUX_ADMIN_PASSWORD;
+
+  if (enteredPassword === tuxPassword) {
+    try {
+      await stampTuxSessionVersionAfterLogin();
+    } catch (error) {
+      console.error(
+        'TUX POS — Could not verify the shared session:',
+        error
+      );
+
+      alert(
+        'Unable to verify the shared session with Supabase. Please check your connection and try again.'
+      );
+
+      return;
+    }
+
+    tuxAdminActive = true;
+    adminActive = false;
+    activeStaffIds = [];
+
+    saveLoginSession();
+    closeStaffLogin();
+    updateStaffUI();
+    applyRolePermissions();
+
+    alert('Tux Admin login successful.');
+    return;
+  }
+
+  /*
+     ADMIN
+  */
+
+  if (
+    adminAccount &&
+    adminAccount.password &&
+    enteredPassword === String(adminAccount.password)
+  ) {
+    try {
+      await stampTuxSessionVersionAfterLogin();
+    } catch (error) {
+      console.error(
+        'TUX POS — Could not verify the shared session:',
+        error
+      );
+
+      alert(
+        'Unable to verify the shared session with Supabase. Please check your connection and try again.'
+      );
+
+      return;
+    }
+
+    adminActive = true;
+    tuxAdminActive = false;
+    activeStaffIds = [];
+
+    saveLoginSession();
+    closeStaffLogin();
+    updateStaffUI();
+    applyRolePermissions();
+
+    alert('Admin login successful.');
+    return;
+  }
+
+  /*
+     WORKER
+  */
+
+  const worker = Array.isArray(workersList)
+    ? workersList.find(
+        item =>
+          item &&
+          String(item.password || '') === enteredPassword
+      )
+    : null;
+
+  if (worker) {
+    try {
+      await stampTuxSessionVersionAfterLogin();
+    } catch (error) {
+      console.error(
+        'TUX POS — Could not verify the shared session:',
+        error
+      );
+
+      alert(
+        'Unable to verify the shared session with Supabase. Please check your connection and try again.'
+      );
+
+      return;
+    }
+
+    const workerId = String(worker.id);
+
+    if (!Array.isArray(activeStaffIds)) {
+      activeStaffIds = [];
+    }
+
+    if (
+      !activeStaffIds.some(
+        id => String(id) === workerId
+      )
+    ) {
+      activeStaffIds.push(workerId);
+    }
+
+    tuxAdminActive = false;
+    adminActive = false;
+
+    try {
+      if (typeof createAttendanceSession === 'function') {
+        createAttendanceSession(worker.id);
+      }
+    } catch (error) {
+      console.error(
+        'TUX POS — Failed to create attendance session:',
+        error
+      );
+    }
+
+    worker.attendance = true;
+    saveLoginSession();
+
+    try {
+      localStorage.setItem(
+        'tuxWorkersList',
+        JSON.stringify(workersList)
+      );
+    } catch (error) {
+      console.error(
+        'TUX POS — Failed to save workers:',
+        error
+      );
+    }
+
+    closeStaffLogin();
+    updateStaffUI();
+    applyRolePermissions();
+
+    if (typeof updateStaffStatus === 'function') {
+      updateStaffStatus();
+    }
+
+    alert(`${worker.name || 'Worker'} logged in successfully.`);
+    return;
+  }
+
+  alert('Invalid password.');
+}
+
+
+/* =========================================================
+   STAFF LOGOUT
+   ========================================================= */
+
+
+async function staffLogout(password) {
+
+  const enteredPassword = String(password || '').trim();
+
+  if (!enteredPassword) {
+    alert('Please enter your password.');
+    return;
+  }
+
+  /*
+   * TUX ADMIN LOGOUT
+   */
 
   if (tuxAdminActive) {
 
-    return 'tuxadmin';
+    const tuxPassword =
+      adminAccount && adminAccount.tuxPassword
+        ? String(adminAccount.tuxPassword)
+        : DEFAULT_TUX_ADMIN_PASSWORD;
 
+    if (enteredPassword !== tuxPassword) {
+      alert('Incorrect Tux Admin password.');
+      return;
+    }
+
+    tuxAdminActive = false;
+
+    saveLoginSession();
+    closeStaffLogin();
+    updateStaffUI();
+    applyRolePermissions();
+
+    alert('Tux Admin logged out.');
+    return;
   }
 
+  /*
+   * ADMIN LOGOUT
+   */
 
   if (adminActive) {
 
-    return 'admin';
+    if (
+      !adminAccount ||
+      !adminAccount.password ||
+      enteredPassword !== String(adminAccount.password)
+    ) {
+      alert('Incorrect Admin password.');
+      return;
+    }
 
+    adminActive = false;
+
+    saveLoginSession();
+    closeStaffLogin();
+    updateStaffUI();
+    applyRolePermissions();
+
+    alert('Admin logged out.');
+    return;
   }
 
+  /*
+   * WORKER LOGOUT
+   */
 
-  return 'worker';
+  const worker = Array.isArray(workersList)
+    ? workersList.find(
+        item =>
+          item &&
+          String(item.password || '') === enteredPassword &&
+          Array.isArray(activeStaffIds) &&
+          activeStaffIds.some(
+            id => String(id) === String(item.id)
+          )
+      )
+    : null;
 
-}
+  if (!worker) {
+    alert('Incorrect password or no matching logged-in worker.');
+    return;
+  }
 
+  try {
 
-/* =========================================================
-   CHECK ADMIN SPECTATE MODE
-   ========================================================= */
+    /*
+     * Wait for Supabase to close the attendance session.
+     * Do not log out locally if saving fails.
+     */
 
-function isAdminSpectateMode() {
+    await endAttendanceSession(worker.id);
 
-  return (
-    adminActive === true &&
-    tuxAdminActive !== true
-  );
-
-}
-
-
-/* =========================================================
-   CHECK FULL ACCESS
-   ========================================================= */
-
-function isTuxAdmin() {
-
-  return (
-    tuxAdminActive === true
-  );
-
-}
-
-
-/* =========================================================
-   CHECK WHETHER CURRENT USER CAN EDIT
-   ========================================================= */
-
-function canEdit() {
-
-  return (
-    tuxAdminActive === true ||
-    (
-      tuxAdminActive !== true &&
-      adminActive !== true
-    )
-  );
-
-}
-
-
-/* =========================================================
-   BLOCK ADMIN FROM EDITING
-   ========================================================= */
-
-function requireEditPermission() {
-
-  if (isAdminSpectateMode()) {
-
-    alert(
-      'Admin is in Spectate Mode.\n\n' +
-      'You can view the data, but you cannot make changes.'
+    activeStaffIds = activeStaffIds.filter(
+      id => String(id) !== String(worker.id)
     );
 
-    return false;
+    /*
+     * Do not set worker.attendance = false.
+     * Attendance must remain an array of session records.
+     */
+
+    saveLoginSession();
+
+    closeStaffLogin();
+    updateStaffUI();
+    applyRolePermissions();
+
+    if (typeof updateStaffStatus === 'function') {
+      updateStaffStatus();
+    }
+
+    if (typeof renderWorkersView === 'function') {
+      renderWorkersView();
+    }
+
+    if (typeof renderSelectedWorker === 'function') {
+      renderSelectedWorker();
+    }
+
+    window.dispatchEvent(
+      new CustomEvent('tux-attendance-updated')
+    );
+
+    alert(`${worker.name || 'Worker'} logged out.`);
+
+  } catch (error) {
+
+    console.error(
+      'TUX POS — Worker logout failed:',
+      error
+    );
+
+    alert(
+      'Logout failed because the attendance session could not be closed. Please try again.'
+    );
 
   }
 
+}
 
-  return true;
+/* =========================================================
+   UPDATE STAFF UI
+   ========================================================= */
 
+function updateStaffUI() {
+  const status = document.getElementById('staffStatus');
+  const loginButton = document.getElementById('staffLoginBtn');
+  const logoutButton = document.getElementById('staffLogoutBtn');
+
+  const role = getActiveRole();
+
+  if (status) {
+    if (role === 'tuxadmin') {
+      status.textContent = 'Tux Admin Logged In';
+    } else if (role === 'admin') {
+      status.textContent = 'Admin Logged In';
+    } else if (role === 'worker') {
+      const names = Array.isArray(activeStaffIds)
+        ? activeStaffIds
+            .map(id => {
+              const worker = Array.isArray(workersList)
+                ? workersList.find(
+                    item => String(item.id) === String(id)
+                  )
+                : null;
+
+              return worker ? worker.name : null;
+            })
+            .filter(Boolean)
+        : [];
+
+      status.textContent = names.length
+        ? names.join(' + ')
+        : 'Worker Logged In';
+    } else {
+      status.textContent = 'Not Logged In';
+    }
+  }
+
+  if (loginButton) {
+    loginButton.style.display = 'inline-block';
+  }
+
+  if (logoutButton) {
+    logoutButton.style.display = role
+      ? 'inline-block'
+      : 'none';
+  }
+
+  /*
+     This is the main visibility fix.
+     When there is no active role, navbar.html is
+     switched to logged-out mode by its real .top-nav
+     container. Only Staff Login remains visible.
+  */
+
+  updateTuxNavbarVisibility();
 }
 
 
 /* =========================================================
-   PERMISSIONS
+   ALIAS USED BY EXISTING CODE
+   ========================================================= */
+
+function updateStaffStatus() {
+  updateStaffUI();
+}
+
+
+/* =========================================================
+   ROLE PERMISSIONS
    ========================================================= */
 
 function applyRolePermissions() {
+  const role = getActiveRole();
 
-  const role =
-    getActiveRole();
-
-
-  const canSeeRestricted =
-    role === 'admin' ||
-    role === 'tuxadmin';
-
-
-  const isViewOnly =
-    role === 'admin';
-
-
-  /* =====================================================
-     NAVIGATION
-     ===================================================== */
-
-  RESTRICTED_NAV_IDS.forEach(
-    function (id) {
-
-      const btn =
-        document.getElementById(id);
-
-
-      if (btn) {
-
-        btn.style.display =
-          canSeeRestricted
-            ? 'flex'
-            : 'none';
-
-      }
-
-    }
-  );
-
-
-  /* =====================================================
-     FORCE CASHIER FOR WORKERS
-     ===================================================== */
-
-  const activeSection =
-    document.querySelector(
-      '.view-section.active'
-    );
-
-
-  if (
-    activeSection &&
-    !canSeeRestricted
-  ) {
-
-    const activeId =
-      activeSection.id.replace(
-        '-view',
-        ''
-      );
-
-
-    if (
-      RESTRICTED_VIEWS.includes(
-        activeId
-      )
-    ) {
-
-      const cashierBtn =
-        document.getElementById(
-          'navCashier'
-        );
-
-
-      if (cashierBtn) {
-
-        switchView(
-          'cashier',
-          cashierBtn
-        );
-
-      }
-
-    }
-
-  }
-
-
-  /* =====================================================
-     ADMIN SPECTATE MODE BODY CLASS
-     ===================================================== */
-
-  if (isViewOnly) {
-
-    document.body.classList.add(
-      'admin-spectate-mode'
-    );
-
-  }
-
-  else {
-
-    document.body.classList.remove(
-      'admin-spectate-mode'
-    );
-
-  }
-
-
-  /* =====================================================
-     INPUTS ADMIN CANNOT EDIT
-     ===================================================== */
-
-  const adminRestrictedInputs = [
-
-    'expStockKey',
-    'expName',
-    'expQty',
-    'expCost',
-    'expNotes',
-
-    'workerName',
-    'workerPassword',
-
-    'adminName',
-    'adminPasswordInput',
-
-    'newMenuItemName',
-    'newMenuItemPrice',
-    'newMenuItemCategory',
-
-    'tuxCurrentPassword',
-    'tuxNewPassword',
-    'tuxConfirmPassword'
-
+  const restrictedViews = [
+    'expenses',
+    'sales',
+    'workers',
+    'gamiya',
+    'settings'
   ];
 
-
-  adminRestrictedInputs.forEach(
-    function (id) {
-
-      const el =
-        document.getElementById(id);
-
-
-      if (el) {
-
-        el.disabled =
-          isViewOnly;
-
-      }
-
-    }
-  );
-
-
-  /* =====================================================
-     BUTTONS ADMIN CANNOT USE
-     ===================================================== */
-
-  const adminRestrictedButtons = [
-
-    'saveExpenseBtn',
-
-    'addWorkerBtn',
-
-    'addStockItemBtn',
-
-    'addMenuItemBtn',
-
-    'saveAdminAccountBtn',
-
-    'saveRecipeBtn',
-
-    'resetRecipeBtn',
-
-    'deleteMenuItemBtn',
-
-    'shiftHistoryResetBtn',
-
-    'gamiyaResetBtn',
-
-    'attendanceResetBtn',
-
-    'saveTuxAdminPasswordBtn',
-
-    'changeTuxAdminPasswordBtn'
-
-  ];
-
-
-  adminRestrictedButtons.forEach(
-    function (id) {
-
-      const el =
-        document.getElementById(id);
-
-
-      if (el) {
-
-        el.disabled =
-          isViewOnly;
-
-      }
-
-    }
-  );
-
-
-  /* =====================================================
-     ADMIN ACCOUNT
-
-     Only Tux Admin can modify Admin account.
-     ===================================================== */
-
-  [
-    'adminName',
-    'adminPasswordInput',
-    'saveAdminAccountBtn'
-
-  ].forEach(
-    function (id) {
-
-      const el =
-        document.getElementById(id);
-
-
-      if (el) {
-
-        el.disabled =
-          role !== 'tuxadmin';
-
-      }
-
-    }
-  );
-
-
-  /* =====================================================
-     TUX ADMIN SECTION
-     ===================================================== */
-
-  const tuxSection =
-    document.getElementById(
-      'tuxAdminSection'
+  restrictedViews.forEach(viewName => {
+    const button = document.getElementById(
+      'nav' +
+      viewName.charAt(0).toUpperCase() +
+      viewName.slice(1)
     );
 
+    if (!button) return;
 
-  if (tuxSection) {
-
-    tuxSection.style.display =
-      role === 'tuxadmin'
-        ? 'block'
-        : 'none';
-
-  }
-
-
-  /* =====================================================
-     PASSWORD MANAGER
-     ===================================================== */
-
-  const pwSection =
-    document.getElementById(
-      'passwordsManagerSection'
-    );
-
-
-  if (pwSection) {
-
-    pwSection.style.display =
-      role === 'tuxadmin'
-        ? 'block'
-        : 'none';
-
-  }
-
-
-  /* =====================================================
-     RECIPE EDITOR
-     ===================================================== */
-
-  document.querySelectorAll(
-
-    '#recipeEditorBody input, ' +
-    '#saveRecipeBtn, ' +
-    '#resetRecipeBtn, ' +
-    '#deleteMenuItemSelect, ' +
-    '#deleteMenuItemBtn'
-
-  ).forEach(
-    function (el) {
-
-      el.disabled =
-        isViewOnly;
-
+    if (role === 'worker') {
+      button.style.display = 'none';
+    } else {
+      button.style.display = '';
     }
+  });
+
+  const stockButton = document.getElementById('navStock');
+
+  if (stockButton) {
+    stockButton.style.display = '';
+  }
+
+  const hawalkNav = document.getElementById('navHawalk');
+
+  if (hawalkNav) {
+    hawalkNav.style.display =
+      role === 'admin' || role === 'tuxadmin'
+        ? ''
+        : 'none';
+  }
+
+  const hawalkCashierButton =
+    document.getElementById('hawalkCashierBtn');
+
+  if (hawalkCashierButton) {
+    hawalkCashierButton.style.display =
+      role === 'worker' ? 'block' : 'none';
+  }
+
+  const workersView = document.getElementById('workers-view');
+
+  if (workersView && role === 'worker') {
+    workersView.classList.remove('active');
+  }
+
+  if (typeof applyHawalkRoleUI === 'function') {
+    applyHawalkRoleUI();
+  }
+
+  if (typeof renderStockSettings === 'function') {
+    renderStockSettings();
+  }
+
+  if (typeof refreshExpensesPermissions === 'function') {
+    refreshExpensesPermissions();
+  }
+
+  if (typeof refreshAdminReportPermissions === 'function') {
+    refreshAdminReportPermissions();
+  }
+
+  const financeControls =
+    document.getElementById('financeControls');
+
+  if (financeControls) {
+    financeControls.style.display =
+      role === 'tuxadmin' ? 'flex' : 'none';
+  }
+
+  const adminAccountSection =
+    document.getElementById('adminAccountSection');
+
+  if (adminAccountSection) {
+    adminAccountSection.style.display =
+      role === 'tuxadmin' ? '' : 'none';
+  }
+
+  const tuxAdminSection =
+    document.getElementById('tuxAdminSection');
+
+  if (tuxAdminSection) {
+    tuxAdminSection.style.display =
+      role === 'tuxadmin' ? '' : 'none';
+  }
+
+  const passwordManager =
+    document.getElementById('passwordsManagerSection');
+
+  if (passwordManager) {
+    passwordManager.style.display =
+      role === 'tuxadmin' ? '' : 'none';
+  }
+
+  const addWorkerButton =
+    document.getElementById('addWorkerBtn');
+
+  if (addWorkerButton) {
+    addWorkerButton.disabled = role !== 'tuxadmin';
+  }
+
+  const saveAdminButton =
+    document.getElementById('saveAdminAccountBtn');
+
+  if (saveAdminButton) {
+    saveAdminButton.disabled = role !== 'tuxadmin';
+  }
+
+  const saveTuxButton =
+    document.getElementById('saveTuxAdminBtn');
+
+  if (saveTuxButton) {
+    saveTuxButton.disabled = role !== 'tuxadmin';
+  }
+
+  const addStockButton =
+    document.getElementById('addStockItemBtn');
+
+  if (addStockButton) {
+    addStockButton.style.display =
+      role === 'tuxadmin' ? '' : 'none';
+  }
+
+  const hawalkView =
+    document.getElementById('hawalk-view');
+
+  if (hawalkView && role === 'worker') {
+    hawalkView.classList.remove('active');
+  }
+
+  updateStaffUI();
+}
+
+
+/* =========================================================
+   ADMIN REPORT PERMISSIONS
+   ========================================================= */
+
+function refreshAdminReportPermissions() {
+  const role = getActiveRole();
+
+  const editButton =
+    document.getElementById('adminReportEditBtn');
+
+  const resetButton =
+    document.getElementById('adminReportResetBtn');
+
+  if (editButton) {
+    editButton.style.display =
+      role === 'admin' || role === 'tuxadmin'
+        ? 'inline-block'
+        : 'none';
+  }
+
+  if (resetButton) {
+    resetButton.style.display =
+      role === 'tuxadmin' ? 'inline-block' : 'none';
+  }
+}
+
+
+/* =========================================================
+   EXPENSE PERMISSIONS
+   ========================================================= */
+
+function refreshExpensesPermissions() {
+  const role = getActiveRole();
+
+  const saveExpenseButton =
+    document.getElementById('saveExpenseBtn');
+
+  const deleteAllButton =
+    document.getElementById('deleteAllExpensesBtn');
+
+  if (saveExpenseButton) {
+    saveExpenseButton.disabled =
+      role === 'admin' || !role;
+  }
+
+  if (deleteAllButton) {
+    deleteAllButton.style.display =
+      role === 'tuxadmin' ? 'inline-block' : 'none';
+  }
+}
+
+
+/* =========================================================
+   ADMIN ACCOUNT
+   ========================================================= */
+
+function saveAdminAccount() {
+  if (!isTuxAdmin()) {
+    alert('Only Tux Admin can change the Admin account.');
+    return;
+  }
+
+  const nameInput = document.getElementById('adminName');
+  const passwordInput =
+    document.getElementById('adminPasswordInput');
+
+  const name = nameInput
+    ? String(nameInput.value || '').trim()
+    : '';
+
+  const password = passwordInput
+    ? String(passwordInput.value || '').trim()
+    : '';
+
+  if (!name) {
+    alert('Please enter the Admin name.');
+    return;
+  }
+
+  if (!password) {
+    alert('Please enter the Admin password.');
+    return;
+  }
+
+  adminAccount = {
+    ...(adminAccount || {}),
+    name,
+    password
+  };
+
+  localStorage.setItem(
+    'tuxAdminAccount',
+    JSON.stringify(adminAccount)
   );
 
-
-  /* =====================================================
-     FINANCE CONTROLS
-     ===================================================== */
-
-  const financeBox =
-    document.getElementById(
-      'financeControls'
-    );
-
-
-  if (financeBox) {
-
-    financeBox.style.display =
-      role === 'tuxadmin'
-        ? 'flex'
-        : 'none';
-
-  }
-
-
-  /* =====================================================
-     RESET BUTTONS
-     ===================================================== */
-
-  [
-    'shiftHistoryResetBtn',
-    'gamiyaResetBtn',
-    'attendanceResetBtn'
-
-  ].forEach(
-    function (id) {
-
-      const el =
-        document.getElementById(id);
-
-
-      if (el) {
-
-        el.style.display =
-          role === 'tuxadmin'
-            ? 'inline-block'
-            : 'none';
-
-      }
-
-    }
-  );
-
-
-  /* =====================================================
-     ADMIN STATUS
-     ===================================================== */
+  if (nameInput) nameInput.value = '';
+  if (passwordInput) passwordInput.value = '';
 
   renderAdminAccountStatus();
 
+  alert('Admin account saved successfully.');
 }
 
 
@@ -845,1528 +1201,64 @@ function applyRolePermissions() {
    ========================================================= */
 
 function renderAdminAccountStatus() {
-
-  const el =
-    document.getElementById(
-      'adminAccountStatus'
-    );
-
-
-  if (!el) {
-
-    return;
-
-  }
-
-
-  el.innerText =
-    adminAccount
-
-      ? (
-          'Current Admin: ' +
-          adminAccount.name +
-          ' (leave password empty to keep it)'
-        )
-
-      : 'No Admin account set yet.';
-
-
-  const nameInput =
-    document.getElementById(
-      'adminName'
-    );
-
-
-  if (
-    nameInput &&
-    adminAccount &&
-    !nameInput.value &&
-    document.activeElement !== nameInput
-  ) {
-
-    nameInput.value =
-      adminAccount.name;
-
-  }
-
-}
-
-
-/* =========================================================
-   SAVE ADMIN ACCOUNT
-   ========================================================= */
-
-function saveAdminAccount() {
-
-  if (
-    getActiveRole() !== 'tuxadmin'
-  ) {
-
-    alert(
-      'Only Tux Admin can set the Admin account.'
-    );
-
-    return;
-
-  }
-
-
-  const name =
-    document
-      .getElementById('adminName')
-      .value
-      .trim();
-
-
-  const pass =
-    document
-      .getElementById('adminPasswordInput')
-      .value
-      .trim();
-
-
-  if (!name) {
-
-    alert(
-      'Please enter an admin name.'
-    );
-
-    return;
-
-  }
-
-
-  if (!pass && !adminAccount) {
-
-    alert(
-      'Please enter an admin password.'
-    );
-
-    return;
-
-  }
-
-
-  const finalPass =
-    pass ||
-    adminAccount.password;
-
-
-  if (
-    finalPass ===
-    getTuxAdminPassword()
-  ) {
-
-    alert(
-      'Admin password must be different from the Tux Admin password.'
-    );
-
-    return;
-
-  }
-
-
-  if (
-    workersList.some(
-      function (worker) {
-
-        return (
-          String(worker.password) ===
-          String(finalPass)
-        );
-
-      }
-    )
-  ) {
-
-    alert(
-      'This password is already used by a worker.'
-    );
-
-    return;
-
-  }
-
-
-  adminAccount = {
-
-    name: name,
-
-    password: finalPass
-
-  };
-
-
-  localStorage.setItem(
-    'tuxAdminAccount',
-    JSON.stringify(
-      adminAccount
-    )
-  );
-
-
-  document
-    .getElementById(
-      'adminPasswordInput'
-    )
-    .value = '';
-
-
-  renderPasswordsManager();
-
-  renderAdminAccountStatus();
-
-
-  alert(
-    'Admin account saved successfully.' +
-    (
-      pass
-        ? ''
-        : '\n(Password unchanged)'
-    )
-  );
-
-}
-
-
-/* =========================================================
-   CHANGE TUX ADMIN PASSWORD
-   ========================================================= */
-
-function changeTuxAdminPassword() {
-
-  if (
-    getActiveRole() !== 'tuxadmin'
-  ) {
-
-    alert(
-      'Only Tux Admin can change this password.'
-    );
-
-    return;
-
-  }
-
-
-  const current =
-    document
-      .getElementById(
-        'tuxCurrentPassword'
-      )
-      .value
-      .trim();
-
-
-  const next =
-    document
-      .getElementById(
-        'tuxNewPassword'
-      )
-      .value
-      .trim();
-
-
-  const confirmPass =
-    document
-      .getElementById(
-        'tuxConfirmPassword'
-      )
-      .value
-      .trim();
-
-
-  if (
-    current !==
-    getTuxAdminPassword()
-  ) {
-
-    alert(
-      'Current Tux Admin password is incorrect.'
-    );
-
-    return;
-
-  }
-
-
-  if (
-    !next ||
-    next.length < 6
-  ) {
-
-    alert(
-      'New password must be at least 6 characters.'
-    );
-
-    return;
-
-  }
-
-
-  if (
-    next !== confirmPass
-  ) {
-
-    alert(
-      'New password and confirmation do not match.'
-    );
-
-    return;
-
-  }
-
-
-  if (
-    adminAccount &&
-    next ===
-    String(adminAccount.password)
-  ) {
-
-    alert(
-      'Tux Admin password must be different from the Admin password.'
-    );
-
-    return;
-
-  }
-
-
-  if (
-    workersList.some(
-      function (worker) {
-
-        return (
-          String(worker.password) ===
-          next
-        );
-
-      }
-    )
-  ) {
-
-    alert(
-      'This password is already used by a worker.'
-    );
-
-    return;
-
-  }
-
-
-  localStorage.setItem(
-    'tuxAdminPassword',
-    next
-  );
-
-
-  renderPasswordsManager();
-
-
-  document
-    .getElementById(
-      'tuxCurrentPassword'
-    )
-    .value = '';
-
-
-  document
-    .getElementById(
-      'tuxNewPassword'
-    )
-    .value = '';
-
-
-  document
-    .getElementById(
-      'tuxConfirmPassword'
-    )
-    .value = '';
-
-
-  alert(
-    'Tux Admin password changed successfully.'
-  );
-
-}
-
-
-/* =========================================================
-   STAFF UI
-   ========================================================= */
-
-function updateStaffUI() {
-
   const status =
-    document.getElementById(
-      'staffStatus'
-    );
+    document.getElementById('adminAccountStatus');
 
+  if (!status) return;
 
-  const loginBtn =
-    document.getElementById(
-      'staffLoginBtn'
-    );
+  if (adminAccount && adminAccount.name) {
+    status.textContent =
+      `Admin account: ${adminAccount.name}`;
 
+    status.style.color = '#2ecc71';
+  } else {
+    status.textContent =
+      'No Admin account configured.';
 
-  const logoutBtn =
-    document.getElementById(
-      'staffLogoutBtn'
-    );
-
-
-  if (
-    !status ||
-    !loginBtn ||
-    !logoutBtn
-  ) {
-
-    return;
-
+    status.style.color = '#e67e22';
   }
-
-
-  const labels = [];
-
-
-  /* =====================================================
-     TUX ADMIN
-
-     If Tux Admin is logged in on THIS browser/tab,
-     show ONLY Tux Admin.
-
-     IMPORTANT:
-     The previous Worker remains stored in
-     activeStaffIds.
-     ===================================================== */
-
-  if (tuxAdminActive) {
-
-    labels.push(
-      '🛡 Tux Admin'
-    );
-
-  }
-
-
-  /* =====================================================
-     NORMAL ADMIN
-
-     If Admin is logged in on THIS browser/tab,
-     show ONLY Admin.
-
-     IMPORTANT:
-     The previous Worker remains stored in
-     activeStaffIds.
-     ===================================================== */
-
-  else if (
-    adminActive &&
-    adminAccount
-  ) {
-
-    labels.push(
-      '👁 ' +
-      adminAccount.name +
-      ' (Admin)'
-    );
-
-  }
-
-
-  /* =====================================================
-     WORKERS
-
-     IMPORTANT:
-
-     DO NOT use getActiveWorkers() here.
-
-     The Worker login belongs to THIS browser/tab.
-
-     activeStaffIds contains the Workers remembered by
-     this specific tab.
-
-     Example:
-
-       Tab A:
-         activeStaffIds = [Test]
-
-       Tab B:
-         activeStaffIds = [Test]
-
-       Tab B -> Tux Admin:
-         activeStaffIds = [Test]
-
-       Tab B -> Admin:
-         activeStaffIds = [Test]
-
-       Tab B -> Logout:
-         activeStaffIds = [Test]
-
-       Tab B -> Test Worker
-     ===================================================== */
-
-  else {
-
-    if (
-      Array.isArray(activeStaffIds)
-    ) {
-
-      activeStaffIds.forEach(
-        function (id) {
-
-          const worker =
-            workersList.find(
-              function (item) {
-
-                return (
-                  String(item.id) ===
-                  String(id)
-                );
-
-              }
-            );
-
-
-          if (worker) {
-
-            labels.push(
-              worker.name
-            );
-
-          }
-
-        }
-      );
-
-    }
-
-  }
-
-
-  /* =====================================================
-     UPDATE UI
-     ===================================================== */
-
-  if (labels.length > 0) {
-
-    status.innerText =
-      '🟢 ' +
-      labels.join(', ');
-
-
-    status.classList.add(
-      'logged-in'
-    );
-
-
-    loginBtn.style.display =
-      'block';
-
-
-    logoutBtn.style.display =
-      'block';
-
-  }
-
-  else {
-
-    status.innerText =
-      'Not Logged In';
-
-
-    status.classList.remove(
-      'logged-in'
-    );
-
-
-    loginBtn.style.display =
-      'block';
-
-
-    logoutBtn.style.display =
-      'none';
-
-  }
-
 }
 
 
 /* =========================================================
-   STAFF LOGIN / LOGOUT MODAL
+   DEFAULT PERMISSIONS INITIALIZATION
    ========================================================= */
 
-function showStaffModal(mode) {
-
-  staffModalMode =
-    mode;
-
-
-  const isLogin =
-    mode === 'login';
-
-
-  const modal =
-    document.getElementById(
-      'staffLoginModal'
-    );
-
-
-  const title =
-    document.getElementById(
-      'staffModalTitle'
-    );
-
-
-  const info =
-    document.getElementById(
-      'staffModalInfo'
-    );
-
-
-  const button =
-    document.getElementById(
-      'staffModalActionBtn'
-    );
-
-
-  const input =
-    document.getElementById(
-      'staffPasswordInput'
-    );
-
-
-  title.innerText =
-    isLogin
-      ? '👤 Staff Login'
-      : '👤 Staff Logout';
-
-
-  info.innerText =
-    isLogin
-      ? 'Enter your staff password'
-      : 'Enter your staff password to logout';
-
-
-  button.innerText =
-    isLogin
-      ? 'Login'
-      : 'Logout';
-
-
-  button.className =
-    isLogin
-      ? 'staff-modal-login'
-      : 'staff-modal-logout';
-
-
-  input.value = '';
-
-
-  modal.classList.add(
-    'active'
-  );
-
-
-  setTimeout(
-    function () {
-
-      input.focus();
-
-    },
-    100
-  );
-
+function initializeAuthUI() {
+  ensureTuxNavbarVisibilityStyles();
+  updateStaffUI();
+  renderAdminAccountStatus();
+  applyRolePermissions();
 }
 
 
-function openStaffLogin() {
+/* =========================================================
+   START AUTH UI AFTER DOM
+   ========================================================= */
 
-  showStaffModal(
-    'login'
-  );
-
-}
-
-
-function openStaffLogout() {
+function startTuxAuthUI() {
+  ensureTuxNavbarVisibilityStyles();
 
   /*
-   * IMPORTANT:
-   * Use this tab's remembered Worker list.
-   *
-   * Do NOT use shared Supabase attendance to decide
-   * whether this tab has a Worker logged in.
-   */
+     Restore any saved session before determining
+     whether the navbar should be visible.
+  */
 
-  const hasRememberedWorker =
-    Array.isArray(activeStaffIds) &&
-    activeStaffIds.length > 0;
+  restoreLoginSession();
 
-
-  if (
-    !hasRememberedWorker &&
-    !tuxAdminActive &&
-    !adminActive
-  ) {
-
-    return;
-
-  }
+  initializeAuthUI();
+  startTuxSharedSessionWatcher();
+}
 
 
-  showStaffModal(
-    'logout'
+if (document.readyState === 'loading') {
+  document.addEventListener(
+    'DOMContentLoaded',
+    function () {
+      startTuxAuthUI();
+    },
+    { once: true }
   );
-
-}
-
-
-function closeStaffLogin() {
-
-  const modal =
-    document.getElementById(
-      'staffLoginModal'
-    );
-
-
-  if (!modal) {
-
-    return;
-
-  }
-
-
-  modal.classList.remove(
-    'active'
-  );
-
-}
-
-
-async function staffModalAction() {
-
-  if (
-    staffModalMode === 'logout'
-  ) {
-
-    await staffLogout();
-
-  }
-
-  else {
-
-    await staffLogin();
-
-  }
-
-}
-
-
-/* =========================================================
-   STAFF LOGIN
-   ========================================================= */
-
-async function staffLogin() {
-
-  const input =
-    document.getElementById(
-      'staffPasswordInput'
-    );
-
-
-  const password =
-    input.value.trim();
-
-
-  if (!password) {
-
-    alert(
-      'Please enter password.'
-    );
-
-    return;
-
-  }
-
-
-  /* =======================================================
-     ROLE 1 — TUX ADMIN
-     ======================================================= */
-
-  if (
-    password ===
-    getTuxAdminPassword()
-  ) {
-
-    tuxAdminActive =
-      true;
-
-
-    /*
-     * Tux Admin takes priority over normal Admin
-     * on this browser/tab.
-     *
-     * IMPORTANT:
-     * DO NOT clear activeStaffIds here.
-     *
-     * If Test Worker was logged in before Tux Admin,
-     * this tab continues remembering Test Worker.
-     */
-
-    adminActive =
-      false;
-
-
-    /*
-     * Tux Admin login is local to this tab.
-     */
-
-    saveLoginSession();
-
-
-    closeStaffLogin();
-
-    updateStaffUI();
-
-    applyRolePermissions();
-
-
-    alert(
-      'Welcome Tux Admin! Full access unlocked.'
-    );
-
-    return;
-
-  }
-
-
-  /* =======================================================
-     ROLE 2 — ADMIN
-     ======================================================= */
-
-  if (
-    adminAccount &&
-    String(password) ===
-    String(adminAccount.password)
-  ) {
-
-    adminActive =
-      true;
-
-
-    /*
-     * Normal Admin takes priority over Tux Admin
-     * display on this browser/tab.
-     *
-     * IMPORTANT:
-     * DO NOT clear activeStaffIds here.
-     *
-     * The previous Worker remains remembered by
-     * this tab.
-     */
-
-    tuxAdminActive =
-      false;
-
-
-    /*
-     * Admin login is local to this tab.
-     */
-
-    saveLoginSession();
-
-
-    closeStaffLogin();
-
-    updateStaffUI();
-
-    applyRolePermissions();
-
-
-    alert(
-      'Welcome ' +
-      adminAccount.name +
-      '! Spectate mode enabled.\n\n' +
-      'You can view the POS but cannot make changes.'
-    );
-
-    return;
-
-  }
-
-
-  /* =======================================================
-     ROLE 3 — WORKER
-     ======================================================= */
-
-  if (
-    workersList.length === 0
-  ) {
-
-    alert(
-      'No workers have been added yet. Please add workers first.'
-    );
-
-    return;
-
-  }
-
-
-  const worker =
-    workersList.find(
-      function (w) {
-
-        return (
-          String(w.password) ===
-          String(password)
-        );
-
-      }
-    );
-
-
-  if (!worker) {
-
-    alert(
-      'Incorrect password!'
-    );
-
-
-    input.value = '';
-
-    input.focus();
-
-
-    return;
-
-  }
-
-
-  /* =======================================================
-     PREVENT DUPLICATE LOGIN
-     ======================================================= */
-
-  if (
-    isStaffLoggedIn(
-      worker.id
-    )
-  ) {
-
-    alert(
-      worker.name +
-      ' is already logged in.'
-    );
-
-
-    input.value = '';
-
-
-    return;
-
-  }
-
-
-  /* =======================================================
-     CREATE ATTENDANCE SESSION
-     ======================================================= */
-
-  try {
-
-    const session =
-      await createAttendanceSession(
-        worker.id
-      );
-
-
-    if (!worker.attendance) {
-
-      worker.attendance = [];
-
-    }
-
-
-    /*
-     * createAttendanceSession() already adds the
-     * attendance record to worker.attendance.
-     */
-
-    const alreadyExists =
-      worker.attendance.some(
-        function (record) {
-
-          return (
-            String(record.id) ===
-            String(session.id)
-          );
-
-        }
-      );
-
-
-    if (!alreadyExists) {
-
-      worker.attendance.unshift({
-
-        id: session.id,
-
-        sessionId: session.id,
-
-        date: session.date,
-
-        checkIn: session.check_in,
-
-        checkOut: '',
-
-        hours: 0,
-
-        status: 'working'
-
-      });
-
-    }
-
-
-    /*
-     * createAttendanceSession() already adds the
-     * worker ID to activeStaffIds.
-     *
-     * DO NOT push it again here.
-     */
-
-
-    saveLoginSession();
-
-
-    closeStaffLogin();
-
-    updateStaffUI();
-
-    applyRolePermissions();
-
-    renderWorkersView();
-
-
-    alert(
-      'Welcome ' +
-      worker.name +
-      '!\nLogin recorded at ' +
-      formatAttendanceTime(
-        session.check_in
-      )
-    );
-
-
-  } catch (error) {
-
-    console.error(
-      'Worker login attendance error:',
-      error
-    );
-
-
-    alert(
-      'Worker login failed.\n\n' +
-      (
-        error.message ||
-        'Could not create attendance record.'
-      )
-    );
-
-  }
-
-}
-
-
-/* =========================================================
-   STAFF LOGOUT
-   ========================================================= */
-
-async function staffLogout() {
-
-  const input =
-    document.getElementById(
-      'staffPasswordInput'
-    );
-
-
-  const password =
-    input.value.trim();
-
-
-  if (!password) {
-
-    alert(
-      'Please enter password.'
-    );
-
-    return;
-
-  }
-
-
-  /* =======================================================
-     ROLE 1 — TUX ADMIN
-     ======================================================= */
-
-  if (
-    password ===
-    getTuxAdminPassword()
-  ) {
-
-    if (!tuxAdminActive) {
-
-      alert(
-        'Tux Admin is not currently logged in.'
-      );
-
-      return;
-
-    }
-
-
-    tuxAdminActive =
-      false;
-
-
-    /*
-     * IMPORTANT:
-     * DO NOT clear activeStaffIds.
-     *
-     * The Worker who was logged in before Tux Admin
-     * must return after Tux Admin logout.
-     */
-
-    saveLoginSession();
-
-
-    closeStaffLogin();
-
-    updateStaffUI();
-
-    applyRolePermissions();
-
-
-    alert(
-      'Tux Admin logged out.'
-    );
-
-    return;
-
-  }
-
-
-  /* =======================================================
-     ROLE 2 — ADMIN
-     ======================================================= */
-
-  if (
-    adminAccount &&
-    String(password) ===
-    String(adminAccount.password)
-  ) {
-
-    if (!adminActive) {
-
-      alert(
-        adminAccount.name +
-        ' is not currently logged in.'
-      );
-
-      return;
-
-    }
-
-
-    adminActive =
-      false;
-
-
-    /*
-     * IMPORTANT:
-     * DO NOT clear activeStaffIds.
-     *
-     * The Worker who was logged in before Admin
-     * must return after Admin logout.
-     */
-
-    saveLoginSession();
-
-
-    closeStaffLogin();
-
-    updateStaffUI();
-
-    applyRolePermissions();
-
-
-    alert(
-      adminAccount.name +
-      ' logged out.'
-    );
-
-    return;
-
-  }
-
-
-  /* =======================================================
-     ROLE 3 — WORKER
-     ======================================================= */
-
-  const worker =
-    workersList.find(
-      function (w) {
-
-        return (
-          String(w.password) ===
-          String(password)
-        );
-
-      }
-    );
-
-
-  if (!worker) {
-
-    alert(
-      'Incorrect password!'
-    );
-
-
-    input.value = '';
-
-    input.focus();
-
-
-    return;
-
-  }
-
-
-  if (
-    !isStaffLoggedIn(
-      worker.id
-    )
-  ) {
-
-    alert(
-      worker.name +
-      ' is not currently logged in.'
-    );
-
-    return;
-
-  }
-
-
-  /* =======================================================
-     FIND OPEN LOCAL SESSION
-     ======================================================= */
-
-  let localSession = null;
-
-
-  if (
-    worker.attendance
-  ) {
-
-    localSession =
-      worker.attendance.find(
-        function (record) {
-
-          return (
-            record.checkIn &&
-            !record.checkOut &&
-            record.status === 'working'
-          );
-
-        }
-      );
-
-  }
-
-
-  /* =======================================================
-     LOAD FROM SUPABASE IF NECESSARY
-     ======================================================= */
-
-  if (!localSession) {
-
-    try {
-
-      await loadWorkerAttendance(
-        worker.id
-      );
-
-
-      localSession =
-        worker.attendance.find(
-          function (record) {
-
-            return (
-              record.checkIn &&
-              !record.checkOut &&
-              record.status === 'working'
-            );
-
-          }
-        );
-
-
-    } catch (error) {
-
-      console.error(
-        'Could not load worker attendance:',
-        error
-      );
-
-
-      alert(
-        'Could not load attendance data.\n\n' +
-        (
-          error.message ||
-          'Please try again.'
-        )
-      );
-
-
-      return;
-
-    }
-
-  }
-
-
-  /* =======================================================
-     NO OPEN SESSION
-     ======================================================= */
-
-  if (!localSession) {
-
-    activeStaffIds =
-      activeStaffIds.filter(
-        function (id) {
-
-          return (
-            String(id) !==
-            String(worker.id)
-          );
-
-        }
-      );
-
-
-    saveLoginSession();
-
-
-    updateStaffUI();
-
-    applyRolePermissions();
-
-    renderWorkersView();
-
-
-    alert(
-      worker.name +
-      ' has no open attendance session.'
-    );
-
-
-    return;
-
-  }
-
-
-  /* =======================================================
-     CLOSE SESSION
-     ======================================================= */
-
-  try {
-
-    const checkOut =
-      new Date();
-
-
-    const checkIn =
-      new Date(
-        localSession.checkIn
-      );
-
-
-    const hours =
-      Math.max(
-        0,
-        (
-          checkOut.getTime() -
-          checkIn.getTime()
-        ) / 3600000
-      );
-
-
-    const roundedHours =
-      Math.round(
-        hours * 100
-      ) / 100;
-
-
-    const updated =
-      await closeAttendanceSession(
-        localSession.id,
-        roundedHours
-      );
-
-
-    /* -------------------------------------------------------
-       Remove worker from THIS TAB's active staff list
-       ------------------------------------------------------- */
-
-    activeStaffIds =
-      activeStaffIds.filter(
-        function (id) {
-
-          return (
-            String(id) !==
-            String(worker.id)
-          );
-
-        }
-      );
-
-
-    saveLoginSession();
-
-
-    closeStaffLogin();
-
-    updateStaffUI();
-
-    applyRolePermissions();
-
-    renderWorkersView();
-
-
-    alert(
-      'Goodbye ' +
-      worker.name +
-      '!\nLogout recorded at ' +
-      formatAttendanceTime(
-        updated.check_out
-      ) +
-      '\nWorked: ' +
-      formatHours(
-        Number(updated.hours || 0)
-      )
-    );
-
-
-  } catch (error) {
-
-    console.error(
-      'Worker logout attendance error:',
-      error
-    );
-
-
-    alert(
-      'Worker logout failed.\n\n' +
-      (
-        error.message ||
-        'Could not close attendance record.'
-      )
-    );
-
-  }
-
-}
-
-
-/* =========================================================
-   END SHIFT
-   ========================================================= */
-
-async function logoutEveryoneAtEndOfDay() {
-
-  try {
-
-    await closeAllAttendanceSessions();
-
-
-    activeStaffIds = [];
-
-
-    tuxAdminActive =
-      false;
-
-
-    adminActive =
-      false;
-
-
-    clearLoginSession();
-
-
-    updateStaffUI();
-
-    applyRolePermissions();
-
-    renderWorkersView();
-
-
-  } catch (error) {
-
-    console.error(
-      'Failed to close all attendance sessions:',
-      error
-    );
-
-
-    alert(
-      'Could not close all attendance sessions.\n\n' +
-      (
-        error.message ||
-        'Please try again.'
-      )
-    );
-
-  }
-
-}
-
-
-/* =========================================================
-   ATTENDANCE TIME FORMAT
-   ========================================================= */
-
-function formatAttendanceTime(value) {
-
-  if (!value) {
-
-    return '';
-
-  }
-
-
-  const date =
-    new Date(value);
-
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-
-    return String(value);
-
-  }
-
-
-  return date.toLocaleTimeString(
-    [],
-    {
-      hour: '2-digit',
-      minute: '2-digit'
-    }
-  );
-
+} else {
+  startTuxAuthUI();
 }

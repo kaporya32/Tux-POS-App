@@ -59,10 +59,6 @@ let expensesRealtimeRefreshTimer = null;
 
 function startExpensesRealtime() {
 
-  /*
-   * Prevent duplicate realtime channels.
-   */
-
   if (expensesRealtimeChannel) {
 
     supabaseClient.removeChannel(
@@ -78,11 +74,6 @@ function startExpensesRealtime() {
     supabaseClient
 
       .channel('tux-expenses-realtime')
-
-
-      /* =====================================================
-         EXPENSES TABLE
-         ===================================================== */
 
       .on(
         'postgres_changes',
@@ -105,11 +96,6 @@ function startExpensesRealtime() {
         }
       )
 
-
-      /* =====================================================
-         SUBSCRIBE
-         ===================================================== */
-
       .subscribe(function (status) {
 
         console.log(
@@ -127,11 +113,6 @@ function startExpensesRealtime() {
    ========================================================= */
 
 function scheduleExpensesRealtimeRefresh() {
-
-  /*
-   * Prevent multiple refreshes if several database
-   * events happen close together.
-   */
 
   if (expensesRealtimeRefreshTimer) {
 
@@ -151,16 +132,8 @@ function scheduleExpensesRealtimeRefresh() {
 
         try {
 
-          /* =================================================
-             RELOAD EXPENSES
-             ================================================= */
-
           await loadExpensesFromSupabase();
 
-
-          /* =================================================
-             UPDATE EXPENSES UI
-             ================================================= */
 
           if (
             typeof populateExpenseStockSelect ===
@@ -182,10 +155,6 @@ function scheduleExpensesRealtimeRefresh() {
           }
 
 
-          /* =================================================
-             UPDATE REPORTS
-             ================================================= */
-
           if (
             typeof refreshReportsFromSupabase ===
             'function'
@@ -205,10 +174,6 @@ function scheduleExpensesRealtimeRefresh() {
 
           }
 
-
-          /* =================================================
-             NOTIFY OTHER MODULES
-             ================================================= */
 
           window.dispatchEvent(
             new CustomEvent(
@@ -414,10 +379,6 @@ async function loadExpensesFromSupabase() {
 async function createExpenseInSupabase(
   expenseData
 ) {
-
-  /* =======================================================
-     ADMIN VIEW-ONLY CHECK
-     ======================================================= */
 
   if (
     blockTuxPosExpensesMutation(
@@ -651,16 +612,12 @@ async function createExpenseInSupabase(
 
 
 /* =========================================================
-   DELETE EXPENSE
+   DELETE ONE EXPENSE
    ========================================================= */
 
 async function deleteExpenseFromSupabase(
   expenseId
 ) {
-
-  /* =======================================================
-     ADMIN VIEW-ONLY CHECK
-     ======================================================= */
 
   if (
     blockTuxPosExpensesMutation(
@@ -732,6 +689,161 @@ async function deleteExpenseFromSupabase(
 
     alert(
       'Could not delete the expense.\n\n' +
+      error.message
+    );
+
+    return false;
+
+  }
+
+}
+
+
+/* =========================================================
+   DELETE ALL EXPENSES
+   TUX ADMIN ONLY
+   ========================================================= */
+
+async function deleteAllExpensesFromSupabase() {
+
+  if (
+    typeof tuxAdminActive === 'undefined' ||
+    tuxAdminActive !== true
+  ) {
+
+    alert(
+      'Only Tux Admin can delete all expenses and purchases.'
+    );
+
+    return false;
+
+  }
+
+
+  if (
+    !expensesList ||
+    expensesList.length === 0
+  ) {
+
+    alert(
+      'There are no expenses or purchases to delete.'
+    );
+
+    return false;
+
+  }
+
+
+  const confirmed =
+    confirm(
+      'WARNING!\n\n' +
+      'This will permanently delete ALL expenses and purchases from the Expenses table.\n\n' +
+      'This action cannot be undone.\n\n' +
+      'Are you sure you want to continue?'
+    );
+
+
+  if (!confirmed) {
+
+    return false;
+
+  }
+
+
+  try {
+
+    const { error } =
+      await supabaseClient
+        .from('expenses')
+        .delete()
+        .not('id', 'is', null);
+
+
+    if (error) {
+
+      console.error(
+        'TUX POS — Failed to delete all expenses:',
+        error
+      );
+
+      alert(
+        'Could not delete all expenses.\n\n' +
+        error.message
+      );
+
+      return false;
+
+    }
+
+
+    expensesList = [];
+
+
+    if (
+      typeof renderExpensesTable ===
+      'function'
+    ) {
+
+      renderExpensesTable();
+
+    }
+
+
+    if (
+      typeof populateExpenseStockSelect ===
+      'function'
+    ) {
+
+      populateExpenseStockSelect();
+
+    }
+
+
+    if (
+      typeof refreshReportsFromSupabase ===
+      'function'
+    ) {
+
+      await refreshReportsFromSupabase();
+
+    }
+
+
+    if (
+      typeof renderSalesReport ===
+      'function'
+    ) {
+
+      renderSalesReport();
+
+    }
+
+
+    window.dispatchEvent(
+      new CustomEvent(
+        'tux-expenses-all-deleted'
+      )
+    );
+
+
+    alert(
+      'All expenses and purchases have been deleted successfully.'
+    );
+
+
+    return true;
+
+  }
+
+  catch (error) {
+
+    console.error(
+      'TUX POS — Delete all expenses failed:',
+      error
+    );
+
+    alert(
+      'Could not delete all expenses.\n\n' +
       error.message
     );
 

@@ -9,7 +9,6 @@
    ========================================================= */
 
 function isTuxPosShiftsAdminReadOnly() {
-
   return (
     typeof adminActive !== 'undefined' &&
     adminActive === true &&
@@ -18,20 +17,13 @@ function isTuxPosShiftsAdminReadOnly() {
       tuxAdminActive === true
     )
   );
-
 }
 
 
-function blockTuxPosShiftsMutation(
-  action
-) {
-
+function blockTuxPosShiftsMutation(action) {
   if (!isTuxPosShiftsAdminReadOnly()) {
-
     return false;
-
   }
-
 
   alert(
     'Admin is view-only. You cannot ' +
@@ -39,9 +31,128 @@ function blockTuxPosShiftsMutation(
     '.'
   );
 
-
   return true;
+}
 
+
+/* =========================================================
+   AUTOMATIC STOCK OPENING BALANCE
+   ========================================================= */
+
+async function syncStockOpeningBalancesFromCurrent() {
+  try {
+    const {
+      data,
+      error
+    } = await supabaseClient
+      .from('stock_items')
+      .select('id,current_quantity')
+      .eq('active', true);
+
+    if (error) {
+      console.error(
+        'TUX POS — Failed to load stock for opening balance:',
+        error
+      );
+
+      alert(
+        'Could not update stock opening balances.\n\n' +
+        error.message
+      );
+
+      return false;
+    }
+
+    const stockItems = data || [];
+
+    for (const item of stockItems) {
+      const currentQuantity =
+        Number(item.current_quantity || 0);
+
+      const {
+        error: updateError
+      } = await supabaseClient
+        .from('stock_items')
+        .update({
+          opening_quantity: currentQuantity
+        })
+        .eq('id', item.id);
+
+      if (updateError) {
+        console.error(
+          'TUX POS — Failed to update stock opening balance:',
+          updateError
+        );
+
+        alert(
+          'Could not update stock opening balance.\n\n' +
+          updateError.message
+        );
+
+        return false;
+      }
+    }
+
+    if (typeof loadStockFromSupabase === 'function') {
+      try {
+        await loadStockFromSupabase();
+      } catch (refreshError) {
+        console.error(
+          'TUX POS — Stock refresh after opening balance update failed:',
+          refreshError
+        );
+      }
+    }
+
+    console.log(
+      'TUX POS — Stock opening balances synchronized from current balances.'
+    );
+
+    return true;
+
+  } catch (error) {
+    console.error(
+      'TUX POS — Stock opening balance synchronization failed:',
+      error
+    );
+
+    alert(
+      'Could not update stock opening balances.\n\n' +
+      error.message
+    );
+
+    return false;
+  }
+}
+
+
+/* =========================================================
+   BUSINESS DATE — CAIRO
+   ========================================================= */
+
+function getTuxBusinessDate(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Africa/Cairo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+
+  const values = {};
+
+  for (const part of parts) {
+    if (part.type !== 'literal') {
+      values[part.type] = part.value;
+    }
+  }
+
+  return (
+    values.year +
+    '-' +
+    values.month +
+    '-' +
+    values.day
+  );
 }
 
 
@@ -50,7 +161,6 @@ function blockTuxPosShiftsMutation(
    ========================================================= */
 
 let shiftsRealtimeChannel = null;
-
 let shiftsRealtimeRefreshTimer = null;
 
 
@@ -59,67 +169,39 @@ let shiftsRealtimeRefreshTimer = null;
    ========================================================= */
 
 function scheduleShiftsRealtimeRefresh() {
+  clearTimeout(shiftsRealtimeRefreshTimer);
 
-  clearTimeout(
-    shiftsRealtimeRefreshTimer
+  shiftsRealtimeRefreshTimer = setTimeout(
+    async function () {
+      try {
+        await loadCurrentShiftFromSupabase();
+        await loadShiftHistoryFromSupabase();
+
+        if (typeof updateShiftUI === 'function') {
+          updateShiftUI();
+        }
+
+        if (typeof renderShiftHistory === 'function') {
+          renderShiftHistory();
+        }
+
+        window.dispatchEvent(
+          new CustomEvent('tux-shifts-updated')
+        );
+
+        console.log(
+          'TUX POS — Shifts refreshed after realtime event.'
+        );
+
+      } catch (error) {
+        console.error(
+          'TUX POS — Failed to refresh shifts after realtime event:',
+          error
+        );
+      }
+    },
+    300
   );
-
-
-  shiftsRealtimeRefreshTimer =
-    setTimeout(
-      async function () {
-
-        try {
-
-          await loadCurrentShiftFromSupabase();
-
-          await loadShiftHistoryFromSupabase();
-
-
-          if (
-            typeof updateShiftUI === 'function'
-          ) {
-
-            updateShiftUI();
-
-          }
-
-
-          if (
-            typeof renderShiftHistory === 'function'
-          ) {
-
-            renderShiftHistory();
-
-          }
-
-
-          window.dispatchEvent(
-            new CustomEvent(
-              'tux-shifts-updated'
-            )
-          );
-
-
-          console.log(
-            'TUX POS — Shifts refreshed after realtime event.'
-          );
-
-        }
-
-        catch (error) {
-
-          console.error(
-            'TUX POS — Failed to refresh shifts after realtime event:',
-            error
-          );
-
-        }
-
-      },
-      300
-    );
-
 }
 
 
@@ -128,72 +210,49 @@ function scheduleShiftsRealtimeRefresh() {
    ========================================================= */
 
 function startShiftsRealtime() {
-
-  if (
-    typeof supabaseClient === 'undefined'
-  ) {
-
+  if (typeof supabaseClient === 'undefined') {
     console.error(
       'TUX POS — Supabase client is not available for shifts realtime.'
     );
-
     return;
-
   }
 
-
   if (shiftsRealtimeChannel) {
-
     console.log(
       'TUX POS — Shifts realtime is already running.'
     );
-
     return;
-
   }
-
 
   console.log(
     'TUX POS — Starting shifts realtime...'
   );
 
+  shiftsRealtimeChannel = supabaseClient
+    .channel('tux-shifts-realtime')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'shifts'
+      },
+      function (payload) {
+        console.log(
+          'TUX POS — Shifts realtime event:',
+          payload.eventType,
+          payload
+        );
 
-  shiftsRealtimeChannel =
-    supabaseClient
-      .channel(
-        'tux-shifts-realtime'
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'shifts'
-        },
-        function (payload) {
-
-          console.log(
-            'TUX POS — Shifts realtime event:',
-            payload.eventType,
-            payload
-          );
-
-
-          scheduleShiftsRealtimeRefresh();
-
-        }
-      )
-      .subscribe(
-        function (status) {
-
-          console.log(
-            'TUX POS — Shifts realtime status:',
-            status
-          );
-
-        }
+        scheduleShiftsRealtimeRefresh();
+      }
+    )
+    .subscribe(function (status) {
+      console.log(
+        'TUX POS — Shifts realtime status:',
+        status
       );
-
+    });
 }
 
 
@@ -202,33 +261,20 @@ function startShiftsRealtime() {
    ========================================================= */
 
 function stopShiftsRealtime() {
-
-  if (
-    shiftsRealtimeChannel
-  ) {
-
+  if (shiftsRealtimeChannel) {
     supabaseClient.removeChannel(
       shiftsRealtimeChannel
     );
 
-    shiftsRealtimeChannel =
-      null;
-
+    shiftsRealtimeChannel = null;
   }
 
-
-  clearTimeout(
-    shiftsRealtimeRefreshTimer
-  );
-
-  shiftsRealtimeRefreshTimer =
-    null;
-
+  clearTimeout(shiftsRealtimeRefreshTimer);
+  shiftsRealtimeRefreshTimer = null;
 
   console.log(
     'TUX POS — Shifts realtime stopped.'
   );
-
 }
 
 
@@ -237,10 +283,11 @@ function stopShiftsRealtime() {
    ========================================================= */
 
 async function loadCurrentShiftFromSupabase() {
-
   try {
-
-    const { data, error } = await supabaseClient
+    const {
+      data,
+      error
+    } = await supabaseClient
       .from('shifts')
       .select('*')
       .eq('status', 'open')
@@ -249,85 +296,63 @@ async function loadCurrentShiftFromSupabase() {
       })
       .limit(1);
 
-
     if (error) {
-
       console.error(
         'TUX POS — Failed to load active shift:',
         error
       );
 
       currentShift = null;
-
       return null;
     }
-
 
     if (!data || data.length === 0) {
-
       currentShift = null;
-
       return null;
     }
-
 
     const shift = data[0];
 
+    const start = shift.start_time
+      ? new Date(shift.start_time)
+      : new Date();
 
     currentShift = {
+      id: shift.id,
+      supabaseId: shift.id,
+      active: true,
 
-      id:
-        shift.id,
+      shiftNumber: shift.shift_number,
+      businessDate: shift.business_date,
 
-      supabaseId:
-        shift.id,
+      startDate: start.toLocaleDateString('en-GB', {
+        timeZone: 'Africa/Cairo'
+      }),
 
-      active:
-        true,
+      startTime: start.toLocaleTimeString('en-GB', {
+        timeZone: 'Africa/Cairo',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      }),
 
-      startDate:
-        new Date(
-          shift.start_time
-        ).toLocaleDateString(),
-
-      startTime:
-        new Date(
-          shift.start_time
-        ).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit'
-        }),
-
-      startTimestamp:
-        shift.start_time,
-
-      startCount:
-        shift.opening_count || null,
-
-      endCount:
-        shift.closing_count || null,
-
-      startedBy:
-        shift.started_by || null
-
+      startTimestamp: shift.start_time,
+      startCount: shift.opening_count || null,
+      endCount: shift.closing_count || null,
+      startedBy: shift.started_by || null
     };
-
 
     return currentShift;
 
   } catch (error) {
-
     console.error(
       'TUX POS — Active shift load failed:',
       error
     );
 
     currentShift = null;
-
     return null;
-
   }
-
 }
 
 
@@ -336,10 +361,11 @@ async function loadCurrentShiftFromSupabase() {
    ========================================================= */
 
 async function loadShiftHistoryFromSupabase() {
-
   try {
-
-    const { data, error } = await supabaseClient
+    const {
+      data,
+      error
+    } = await supabaseClient
       .from('shifts')
       .select('*')
       .eq('status', 'closed')
@@ -347,200 +373,132 @@ async function loadShiftHistoryFromSupabase() {
         ascending: false
       });
 
-
     if (error) {
-
       console.error(
         'TUX POS — Failed to load shift history:',
         error
       );
 
       shiftHistory = [];
-
       return [];
-
     }
 
+    shiftHistory = (data || []).map(function (shift) {
+      const start = shift.start_time
+        ? new Date(shift.start_time)
+        : null;
 
-    shiftHistory =
-      (data || []).map(
-        function (shift) {
+      const end = shift.end_time
+        ? new Date(shift.end_time)
+        : null;
 
-          const start =
-            shift.start_time
-              ? new Date(
-                  shift.start_time
-                )
-              : null;
+      return {
+        id: shift.id,
+        supabaseId: shift.id,
 
+        shiftNumber: shift.shift_number,
+        businessDate: shift.business_date,
 
-          const end =
-            shift.end_time
-              ? new Date(
-                  shift.end_time
-                )
-              : null;
+        startDate: start
+          ? start.toLocaleDateString('en-GB', {
+              timeZone: 'Africa/Cairo'
+            })
+          : '-',
 
+        startTime: start
+          ? start.toLocaleTimeString('en-GB', {
+              timeZone: 'Africa/Cairo',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true
+            })
+          : '-',
 
-          return {
+        endDate: end
+          ? end.toLocaleDateString('en-GB', {
+              timeZone: 'Africa/Cairo'
+            })
+          : '-',
 
-            id:
-              shift.id,
+        endTime: end
+          ? end.toLocaleTimeString('en-GB', {
+              timeZone: 'Africa/Cairo',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true
+            })
+          : '-',
 
-            supabaseId:
-              shift.id,
-
-            startDate:
-              start
-                ? start.toLocaleDateString()
-                : '-',
-
-            startTime:
-              start
-                ? start.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })
-                : '-',
-
-            endDate:
-              end
-                ? end.toLocaleDateString()
-                : '-',
-
-            endTime:
-              end
-                ? end.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })
-                : '-',
-
-            startCount:
-              shift.opening_count || null,
-
-            endCount:
-              shift.closing_count || null,
-
-            startedBy:
-              shift.started_by || null
-
-          };
-
-        }
-      );
-
+        startCount: shift.opening_count || null,
+        endCount: shift.closing_count || null,
+        startedBy: shift.started_by || null
+      };
+    });
 
     return shiftHistory;
 
   } catch (error) {
-
     console.error(
       'TUX POS — Shift history load failed:',
       error
     );
 
     shiftHistory = [];
-
     return [];
-
   }
-
 }
 
 
 /* =========================================================
    CREATE SHIFT IN SUPABASE
+   Requires the create_shift_with_number SQL function.
    ========================================================= */
 
-async function createShiftInSupabase(
-  openingCount
-) {
-
-  /* =======================================================
-     ADMIN VIEW-ONLY CHECK
-     ======================================================= */
-
+async function createShiftInSupabase() {
   if (
-    blockTuxPosShiftsMutation(
-      'start a shift'
-    )
+    blockTuxPosShiftsMutation('start a shift')
   ) {
-
     return null;
-
   }
 
-
   try {
+    const stockSynced =
+      await syncStockOpeningBalancesFromCurrent();
+
+    if (!stockSynced) {
+      return null;
+    }
 
     const activeWorkers =
       typeof getActiveWorkers === 'function'
         ? getActiveWorkers()
         : [];
 
-
-    let startedBy = null;
-
-
-    /*
-      Use the currently logged-in worker.
-    */
-
-    if (
+    const startedBy =
       activeWorkers &&
       activeWorkers.length > 0 &&
       activeWorkers[0] &&
       activeWorkers[0].id
-    ) {
+        ? activeWorkers[0].id
+        : null;
 
-      startedBy =
-        activeWorkers[0].id;
+    const startTime = new Date();
+    const businessDate = getTuxBusinessDate(startTime);
 
-    }
-
-
-    const payload = {
-
-      start_time:
-        new Date().toISOString(),
-
-      status:
-        'open',
-
-      opening_count:
-        openingCount || null,
-
-      closing_count:
-        null
-
-    };
-
-
-    /*
-      Add worker UUID when available.
-    */
-
-    if (startedBy) {
-
-      payload.started_by =
-        startedBy;
-
-    }
-
-
-    const { data, error } =
-      await supabaseClient
-        .from('shifts')
-        .insert(payload)
-        .select('*')
-        .single();
-
+    const {
+      data,
+      error
+    } = await supabaseClient.rpc(
+      'create_shift_with_number',
+      {
+        p_start_time: startTime.toISOString(),
+        p_business_date: businessDate
+      }
+    );
 
     if (error) {
-
       console.error(
-        'TUX POS — Failed to create shift:',
+        'TUX POS — Failed to create numbered shift:',
         error
       );
 
@@ -550,53 +508,68 @@ async function createShiftInSupabase(
       );
 
       return null;
-
     }
 
+    const createdShift =
+      Array.isArray(data) ? data[0] : data;
+
+    if (!createdShift) {
+      alert(
+        'Supabase did not return the newly created shift.'
+      );
+      return null;
+    }
+
+    if (startedBy) {
+      const {
+        error: workerUpdateError
+      } = await supabaseClient
+        .from('shifts')
+        .update({
+          started_by: startedBy
+        })
+        .eq('id', createdShift.id);
+
+      if (workerUpdateError) {
+        console.error(
+          'TUX POS — Could not save shift worker:',
+          workerUpdateError
+        );
+      }
+    }
+
+    const shiftStart = new Date(
+      createdShift.start_time
+    );
 
     currentShift = {
+      id: createdShift.id,
+      supabaseId: createdShift.id,
+      active: true,
 
-      id:
-        data.id,
+      shiftNumber: createdShift.shift_number,
+      businessDate: createdShift.business_date,
 
-      supabaseId:
-        data.id,
+      startDate: shiftStart.toLocaleDateString('en-GB', {
+        timeZone: 'Africa/Cairo'
+      }),
 
-      active:
-        true,
+      startTime: shiftStart.toLocaleTimeString('en-GB', {
+        timeZone: 'Africa/Cairo',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      }),
 
-      startDate:
-        new Date(
-          data.start_time
-        ).toLocaleDateString(),
-
-      startTime:
-        new Date(
-          data.start_time
-        ).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit'
-        }),
-
-      startTimestamp:
-        data.start_time,
-
-      startCount:
-        data.opening_count || null,
-
-      endCount:
-        null,
-
-      startedBy:
-        data.started_by || null
-
+      startTimestamp: createdShift.start_time,
+      startCount: null,
+      endCount: null,
+      startedBy: startedBy
     };
-
 
     return currentShift;
 
   } catch (error) {
-
     console.error(
       'TUX POS — Shift creation failed:',
       error
@@ -608,9 +581,7 @@ async function createShiftInSupabase(
     );
 
     return null;
-
   }
-
 }
 
 
@@ -618,66 +589,48 @@ async function createShiftInSupabase(
    COMPLETE SHIFT IN SUPABASE
    ========================================================= */
 
-async function completeShiftInSupabase(
-  closingCount
-) {
-
-  /* =======================================================
-     ADMIN VIEW-ONLY CHECK
-     ======================================================= */
-
+async function completeShiftInSupabase() {
   if (
-    blockTuxPosShiftsMutation(
-      'end the shift'
-    )
+    blockTuxPosShiftsMutation('end the shift')
   ) {
-
     return false;
-
   }
-
 
   if (
     !currentShift ||
     !currentShift.supabaseId
   ) {
-
     alert(
       'The active shift could not be found in Supabase.'
     );
 
     return false;
-
   }
 
-
   try {
+    const stockSynced =
+      await syncStockOpeningBalancesFromCurrent();
 
-    const { data, error } =
-      await supabaseClient
-        .from('shifts')
-        .update({
+    if (!stockSynced) {
+      return false;
+    }
 
-          end_time:
-            new Date().toISOString(),
-
-          status:
-            'closed',
-
-          closing_count:
-            closingCount || null
-
-        })
-        .eq(
-          'id',
-          currentShift.supabaseId
-        )
-        .select('*')
-        .single();
-
+    const {
+      data,
+      error
+    } = await supabaseClient
+      .from('shifts')
+      .update({
+        end_time: new Date().toISOString(),
+        status: 'closed',
+        closing_count: null
+      })
+      .eq('id', currentShift.supabaseId)
+      .eq('status', 'open')
+      .select('*')
+      .maybeSingle();
 
     if (error) {
-
       console.error(
         'TUX POS — Failed to complete shift:',
         error
@@ -689,22 +642,35 @@ async function completeShiftInSupabase(
       );
 
       return false;
-
     }
 
+    if (!data) {
+      alert(
+        'This shift is already closed or is no longer active. Please refresh the page.'
+      );
 
-    currentShift.endCount =
-      data.closing_count || null;
+      await loadCurrentShiftFromSupabase();
+      await loadShiftHistoryFromSupabase();
 
+      if (typeof updateShiftUI === 'function') {
+        updateShiftUI();
+      }
 
-    currentShift.active =
-      false;
+      return false;
+    }
 
+    currentShift.endCount = null;
+    currentShift.active = false;
+
+    await loadShiftHistoryFromSupabase();
+
+    if (typeof renderShiftHistory === 'function') {
+      renderShiftHistory();
+    }
 
     return true;
 
   } catch (error) {
-
     console.error(
       'TUX POS — Shift completion failed:',
       error
@@ -716,9 +682,7 @@ async function completeShiftInSupabase(
     );
 
     return false;
-
   }
-
 }
 
 
@@ -727,18 +691,7 @@ async function completeShiftInSupabase(
    ========================================================= */
 
 async function saveCurrentShiftData() {
-
-  /*
-    Existing application code still calls
-    this function.
-
-    Supabase shift saving is now handled by:
-      createShiftInSupabase()
-      completeShiftInSupabase()
-  */
-
   return true;
-
 }
 
 
@@ -747,11 +700,8 @@ async function saveCurrentShiftData() {
    ========================================================= */
 
 async function loadSavedShiftData() {
-
   await loadCurrentShiftFromSupabase();
-
   await loadShiftHistoryFromSupabase();
 
   return currentShift;
-
 }

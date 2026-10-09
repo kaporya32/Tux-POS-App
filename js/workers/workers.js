@@ -255,6 +255,38 @@ async function deleteWorker(workerId) {
    Tux Admin only
    ========================================================= */
 
+
+/* =========================================================
+   GET TUX ADMIN PASSWORD
+   ========================================================= */
+
+function getTuxAdminPassword() {
+
+  const savedPassword =
+    localStorage.getItem(
+      'tuxAdminPassword'
+    );
+
+
+  if (
+    savedPassword &&
+    String(savedPassword).trim()
+  ) {
+
+    return String(savedPassword);
+
+  }
+
+
+  return DEFAULT_TUX_ADMIN_PASSWORD;
+
+}
+
+
+/* =========================================================
+   CHECK PASSWORD
+   ========================================================= */
+
 function isPasswordTaken(password, exceptKey) {
 
   if (
@@ -299,6 +331,10 @@ function isPasswordTaken(password, exceptKey) {
 }
 
 
+/* =========================================================
+   PASSWORD VISIBILITY
+   ========================================================= */
+
 function togglePasswordVisibility(key) {
 
   visiblePasswordKeys[key] =
@@ -308,6 +344,10 @@ function togglePasswordVisibility(key) {
 
 }
 
+
+/* =========================================================
+   RENDER PASSWORDS MANAGER
+   ========================================================= */
 
 function renderPasswordsManager() {
 
@@ -889,106 +929,71 @@ function renderWorkersSummary() {
 function renderTodayWorkers() {
 
   const container =
-    document.getElementById(
-      'todayWorkersList'
-    );
-
+    document.getElementById('todayWorkersList');
 
   if (!container) {
     return;
   }
 
-
-  if (workersList.length === 0) {
-
+  if (!Array.isArray(workersList) || workersList.length === 0) {
     container.innerHTML =
-      '<div class="empty-worker">' +
-      'No workers added yet' +
-      '</div>';
-
+      '<div class="empty-worker">No workers added yet</div>';
     return;
-
   }
 
-
-  const today =
-    getTodayKey();
-
+  const today = getTodayKey();
 
   let html = '';
 
-
   workersList.forEach(function (worker) {
 
-    const todaySessions =
-      (worker.attendance || [])
-        .filter(function (record) {
+    const attendance = Array.isArray(worker.attendance)
+      ? worker.attendance
+      : [];
 
-          return record.date === today;
+    const todaySessions = attendance.filter(function (record) {
+      return record.date === today;
+    });
 
-        });
-
+    const hasActiveSession = attendance.some(function (record) {
+      return (
+        record.checkIn &&
+        !record.checkOut &&
+        record.status === 'working'
+      );
+    });
 
     let status =
-      '<span class="worker-status-absent">' +
-      'Absent' +
-      '</span>';
-
+      '<span class="worker-status-absent">Absent</span>';
 
     let times = '';
 
-
-    if (
-      isStaffLoggedIn(
-        worker.id
-      )
-    ) {
+    if (hasActiveSession) {
 
       status =
-        '<span class="worker-status-working">' +
-        'Working' +
-        '</span>';
-
+        '<span class="worker-status-working">Working</span>';
 
       times =
-        'Hours: ' +
-        formatHours(
-          getWorkerHoursForToday(
-            worker
-          )
-        );
-
-    }
-
-    else if (
-      todaySessions.length > 0
-    ) {
-
-      status =
-        '<span class="worker-status-present">' +
-        'Present' +
-        '</span>';
-
-
-      times =
-        'Sessions: ' +
-        todaySessions.length +
+        'Sessions: ' + todaySessions.length +
         ' | Hours: ' +
-        formatHours(
-          getWorkerHoursForToday(
-            worker
-          )
-        );
+        formatHours(getWorkerHoursForToday(worker));
+
+    } else if (todaySessions.length > 0) {
+
+      status =
+        '<span class="worker-status-absent">Absent</span>';
+
+      times =
+        'Sessions: ' + todaySessions.length +
+        ' | Hours: ' +
+        formatHours(getWorkerHoursForToday(worker));
 
     }
-
 
     html += `
-
       <div class="attendance-row">
 
         <div>
-
           <div class="worker-name-cell">
             ${escapeHtmlPw(worker.name)}
           </div>
@@ -996,7 +1001,6 @@ function renderTodayWorkers() {
           <div style="color: #777; font-size: 9px;">
             ${times}
           </div>
-
         </div>
 
         <div>
@@ -1004,11 +1008,9 @@ function renderTodayWorkers() {
         </div>
 
       </div>
-
     `;
 
   });
-
 
   container.innerHTML = html;
 

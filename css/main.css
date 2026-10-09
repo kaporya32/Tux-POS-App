@@ -3201,3 +3201,83 @@ select:focus-visible {
   visibility: visible !important;
   opacity: 1 !important;
 }
+/* =========================================================
+   CATEGORY COLORS SETTINGS
+   ========================================================= */
+
+.category-color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.category-color-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+}
+
+.category-color-info strong {
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.category-color-info span {
+  color: #8f98a3;
+  font-size: 12px;
+}
+
+.category-color-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.category-color-controls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #aeb6c0;
+  font-size: 12px;
+}
+
+.category-color-controls input[type="color"] {
+  width: 42px;
+  height: 34px;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: #171b20;
+  cursor: pointer;
+}
+
+.category-color-controls input[type="color"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.category-color-controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
+@media (max-width: 900px) {
+
+  .category-color-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .category-color-controls {
+    width: 100%;
+  }
+
+}

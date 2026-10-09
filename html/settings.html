@@ -1,0 +1,223 @@
+ <!-- =========================================================
+       SETTINGS
+       ========================================================= -->
+  <div id="settings-view" class="view-section">
+    <div class="panel-box" style="
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:10px;
+        align-content:start;
+      ">
+      <div style="
+          background:#1c1c2b;
+          padding:10px;
+          border-radius:6px;
+          border:1px solid #2c2c42;
+          display:flex;
+          flex-direction:column;
+          gap:6px;
+        ">
+        <h3 style="
+            color:#f1c40f;
+            margin:0;
+            font-size:12px;
+          ">
+          Add Menu Item
+        </h3>
+        <div class="form-group">
+          <label>
+            Item Name:
+          </label>
+          <input type="text" id="newMenuItemName" placeholder="e.g. Double Burger">
+        </div>
+        <div class="form-group">
+
+          <label>
+            Price (LE):
+          </label>
+
+          <input type="number" id="newMenuItemPrice" placeholder="150">
+        </div>
+        <div class="form-group">
+          <label>
+            Category:
+          </label>
+          <select id="newMenuItemCategory">
+            <option value="sandwiches">
+              Sandwiches & Burgers
+            </option>
+            <option value="combos">
+              Combos (Meals)
+            </option>
+            <option value="fries">
+              Fries & Loaded
+            </option>
+            <option value="hawawshi">
+              Hawawshi
+            </option>
+            <option value="drinks">
+              Drinks
+            </option>
+            <option value="dessert">
+              Zalabya (Dessert)
+            </option>
+            <option value="extras">
+              Extras
+            </option>
+          </select>
+        </div>
+        <button class="btn-save" id="addMenuItemBtn" onclick="addNewMenuItem()">
+          Save & Add to Menu
+        </button>
+        <div style="
+            border-top:1px solid #33334d;
+            margin-top:8px;
+            padding-top:8px;
+            display:flex;
+            flex-direction:column;
+            gap:6px;
+          ">
+          <h3 style="
+              color:#f1c40f;
+              margin:0;
+              font-size:12px;
+            ">
+            Delete Menu Item
+          </h3>
+          <div class="form-group">
+            <label>
+              Choose item:
+            </label>
+            <select id="deleteMenuItemSelect"></select>
+          </div>
+          <button class="btn-save" id="deleteMenuItemBtn" style="background:#c0392b;" onclick="deleteMenuItem()">
+            Delete Selected Item
+          </button>
+        </div>
+      </div>
+      <div style="
+          background:#1c1c2b;
+          padding:10px;
+          border-radius:6px;
+          border:1px solid #2c2c42;
+          display:flex;
+          flex-direction:column;
+          gap:6px;
+          overflow-y:auto;
+        ">
+        <h3 style="
+            color:#f1c40f;
+            margin:0;
+            font-size:12px;
+          ">
+          Stock Settings & Min Limits
+        </h3>
+        <table class="settings-table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Opening</th>
+              <th>Current</th>
+              <th>Min Limit</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="stockSettingsTableBody"></tbody>
+        </table>
+      </div>
+      <div style="
+          grid-column:span 2;
+          background:#1c1c2b;
+          padding:10px;
+          border-radius:6px;
+          border:1px solid #2c2c42;
+          display:flex;
+          flex-direction:column;
+          gap:6px;
+        ">
+        <h3 style="
+            color:#f1c40f;
+            margin:0;
+            font-size:12px;
+          ">
+          Item Stock Deductions (Recipes)
+        </h3>
+
+        <div style="
+            font-size:10px;
+            color:#888;
+          ">
+          Choose a menu item, then set how much of each stock item is deducted for every 1 sold. Leave empty or 0 for no
+          deduction. Items counted in kg (like Meat) are entered in grams.
+        </div>
+        <div class="form-group">
+          <label>
+            Menu Item:
+          </label>
+          <select id="recipeItemSelect" onchange="renderRecipeEditor()"></select>
+        </div>
+        <table class="settings-table">
+          <thead>
+            <tr>
+              <th>Stock Item</th>
+              <th>Deducted per 1 sold</th>
+              <th>Unit</th>
+            </tr>
+          </thead>
+          <tbody id="recipeEditorBody"></tbody>
+        </table>
+        <div style="
+            display:flex;
+            gap:6px;
+          ">
+          <button class="btn-save" id="saveRecipeBtn" onclick="saveRecipe()">
+            Save Deductions
+          </button>
+          <button class="btn-save" id="resetRecipeBtn" style="background:#525266;" onclick="resetRecipeToDefault()">
+            Reset Item To Default
+          </button>
+        </div>
+      </div>
+      <!-- CATEGORY COLORS -->
+      <div style="
+          grid-column:1 / -1;
+          background:#1c1c2b;
+          padding:10px;
+          border-radius:6px;
+          border:1px solid #2c2c42;
+          display:flex;
+          flex-direction:column;
+          gap:6px;
+        ">
+        <h3 style="
+            color:#f1c40f;
+            margin:0;
+            font-size:12px;
+          ">
+          Category Colors
+        </h3>
+        <div style="
+            font-size:10px;
+            color:#888;
+            margin-bottom:4px;
+          ">
+          Control the colors used for menu category headers,
+          product cards, and prices.
+          Only Tux Admin can change these colors.
+        </div>
+        <div id="category-colors-settings" style="
+            display:flex;
+            flex-direction:column;
+            gap:10px;
+          ">
+          <div style="
+              padding:20px;
+              text-align:center;
+              color:#9ca3af;
+            ">
+            Loading category colors...
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>

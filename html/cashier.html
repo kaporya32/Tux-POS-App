@@ -1,0 +1,167 @@
+
+<!-- =========================================================
+     CASHIER VIEW
+     ========================================================= -->
+
+<div id="cashier-view" class="view-section active">
+  <div class="pos-container">
+
+    <div class="menu-panel" id="menuPanelContainer"></div>
+
+    <div class="right-panel">
+
+      <!-- LOW STOCK ALERT -->
+      <div
+        id="cashierLowStockAlert"
+        role="status"
+        aria-live="polite"
+        style="
+          display: none;
+          background: #3a1717;
+          border: 1px solid #e74c3c;
+          border-left: 4px solid #e74c3c;
+          border-radius: 6px;
+          padding: 10px;
+          margin-bottom: 8px;
+          color: #fff;
+          font-size: 12px;
+        "
+      >
+        <div style="font-weight: bold; margin-bottom: 6px;">
+          ⚠️ LOW STOCK ALERT
+        </div>
+
+        <div id="cashierLowStockAlertItems"></div>
+      </div>
+
+      <!-- EXTRAS -->
+      <div class="extras-panel">
+        <div
+          class="section-title"
+          style="margin-bottom: 3px; background: #1e1e2d; border-left: 3px solid #e74c3c;"
+        >
+          EXTRAS
+        </div>
+
+        <div
+          class="menu-grid"
+          id="extrasGridContainer"
+          style="grid-template-columns: repeat(4, 1fr);"
+        ></div>
+      </div>
+
+      <!-- CURRENT ORDER -->
+      <div class="order-panel">
+
+        <div class="order-header">
+          <h2>Current Order</h2>
+          <span style="color: #f1c40f; font-weight: bold; font-size: 10px;">
+            POS System
+          </span>
+        </div>
+
+        <div class="cart-table-header">
+          <span style="width: 40%;">Item</span>
+          <span style="width: 25%; text-align: center;">Qty</span>
+          <span style="width: 35%; text-align: right;">Total</span>
+        </div>
+
+        <div class="cart-box" id="cartContent">
+          <div style="text-align: center; color: #555; margin-top: 15px; font-size: 10px;">
+            No items added yet
+          </div>
+        </div>
+
+        <div class="total-box">
+          <span>Total</span>
+          <span class="total-price" id="grandTotal">0</span>
+        </div>
+
+        <!-- PAYMENT -->
+        <div class="payments">
+          <div>
+            <label>Cash:</label>
+            <input type="number" id="cashPaid" value="0" oninput="calcRemaining()">
+          </div>
+
+          <div>
+            <label>InstaPay:</label>
+            <input type="number" id="instaPaid" value="0" oninput="calcRemaining()">
+          </div>
+
+          <div>
+            <label>Visa:</label>
+            <input type="number" id="visaPaid" value="0" oninput="calcRemaining()">
+          </div>
+
+          <div>
+            <label>Discount:</label>
+            <input type="number" id="discount" value="0" oninput="calcRemaining()">
+          </div>
+        </div>
+
+        <div
+          style="font-size: 9.5px; margin-bottom: 3px; font-weight: bold; text-align: center;"
+          id="diffText"
+        >
+          Diff: 0.00 EGP
+        </div>
+
+        <!-- ORDER ACTIONS -->
+        <div class="action-row">
+          <button class="btn-action btn-cancel" onclick="cancelLastItem()">
+            Cancel Last
+          </button>
+
+          <button class="btn-action btn-send" onclick="sendOrder()">
+            Send to Kitchen
+          </button>
+        </div>
+
+        <div class="action-row">
+          <button
+            class="btn-action"
+            style="background: #16a085; flex: 1;"
+            onclick="sendToGamiya()"
+          >
+            🍽️ Gam3ya (Staff Meal)
+          </button>
+        </div>
+
+        <!-- HAWALK -->
+        <div class="action-row">
+          <button
+            class="btn-action"
+            id="hawalkCashierBtn"
+            style="background: #8e44ad; flex: 1;"
+            onclick="openHawalkFromCashier()"
+          >
+            📦 Hawalk
+          </button>
+        </div>
+
+        <!-- WHATSAPP -->
+        <div class="whatsapp-row">
+          <input
+            type="text"
+            id="whatsappNumber"
+            class="whatsapp-input"
+            placeholder="WhatsApp No (e.g. 2010xxxxxxxx)"
+          >
+
+          <button class="btn-whatsapp" onclick="sendToWhatsApp()">
+            Send WhatsApp
+          </button>
+        </div>
+
+        <!-- CLEAR -->
+        <div class="bottom-tools">
+          <button class="tool-btn clear" onclick="clearOrder()">
+            Clear All
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

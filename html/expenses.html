@@ -1,0 +1,152 @@
+<!-- =========================================================
+       EXPENSES
+       ========================================================= -->
+<div id="expenses-view" class="view-section">
+
+    <div class="panel-box" style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px;">
+
+        <div
+            style="background: #1c1c2b; padding: 10px; border-radius: 6px; border: 1px solid #2c2c42; display: flex; flex-direction: column; gap: 6px; height: fit-content;">
+
+            <h3 style="color: #f1c40f; margin: 0; font-size: 12px;">
+                تسجيل مشتريات أو مصروف جديد
+            </h3>
+
+            <div class="form-group">
+
+                <label>
+                    اختر صنف المخزن المرتبط (أو اكتب اسم جديد):
+                </label>
+
+                <select id="expStockKey" onchange="onExpenseItemSelect()">
+                    <option value="">
+                        -- صنف عام (بدون ربط مخزن) --
+                    </option>
+                </select>
+
+            </div>
+
+            <div class="form-group">
+
+                <label>
+                    اسم المصروف / المنتج:
+                </label>
+
+                <input type="text" id="expName" placeholder="مثلاً: لحمة تازة، إيجار، كهرباء...">
+
+            </div>
+
+            <div class="form-group">
+
+                <label>
+                    الكمية المشتراة (تضاف للمخزن إن وجد):
+                </label>
+
+                <input type="number" id="expQty" value="1" step="0.01">
+
+            </div>
+
+            <div class="form-group">
+
+                <label>
+                    الإجمالي المدفوع (LE):
+                </label>
+
+                <input type="number" id="expCost" placeholder="1500">
+
+            </div>
+
+            <div class="form-group">
+
+                <label>
+                    ملاحظات:
+                </label>
+
+                <input type="text" id="expNotes" placeholder="اسم المورد أو تفاصيل إضافية">
+
+            </div>
+
+            <button class="btn-save" id="saveExpenseBtn" onclick="saveExpense()">
+                حفظ وتسجيل المصروف وتحديث المخزن
+            </button>
+
+        </div>
+
+
+        <div
+            style="background: #1c1c2b; padding: 10px; border-radius: 6px; border: 1px solid #2c2c42; display: flex; flex-direction: column; gap: 6px; overflow-y: auto;">
+
+            <div style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+        ">
+
+                <h3 style="color: #f1c40f; margin: 0; font-size: 12px;">
+                    سجل المشتريات والمصروفات
+                </h3>
+
+                <div style="
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+          ">
+
+                    <span style="font-size: 11px; font-weight: bold; color: #e74c3c;">
+                        إجمالي المصروفات:
+                        <span id="totalExpensesDisplay">0.00</span>
+                        LE
+                    </span>
+
+                    <button id="deleteAllExpensesBtn" class="btn-save" onclick="deleteAllExpensesFromSupabase()" style="
+              display: none;
+              padding: 5px 9px;
+              font-size: 9px;
+              background: #c0392b;
+              color: #fff;
+            ">
+                        🗑 Delete All
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <table class="expenses-table">
+
+                <thead>
+
+                    <tr>
+                        <th>الوقت/التاريخ</th>
+                        <th>البيان / الصنف</th>
+                        <th>الكمية المضافة</th>
+                        <th>التكلفة (LE)</th>
+                        <th>ملاحظات</th>
+                        <th>الإجراء</th>
+                    </tr>
+
+                </thead>
+
+                <tbody id="expensesTableBody">
+
+                    <tr>
+
+                        <td colspan="6" style="text-align: center; color: #666;">
+                            لا توجد مصروفات مسجلة حتى الآن
+                        </td>
+
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </div>
+
+</div>

@@ -1,0 +1,40 @@
+<!-- =========================================================
+       STOCK
+       ========================================================= -->
+  <div id="stock-view" class="view-section">
+    <div class="panel-box">
+      <div style="
+          display:flex;
+          justify-content:space-between;
+          align-items:center;
+          margin-bottom:5px;
+        ">
+        <h2 style="
+            color:#f1c40f;
+            margin:0;
+            font-size:14px;
+          ">
+          Inventory & Stock
+        </h2>
+        <button class="btn-save" id="addStockItemBtn" onclick="openAddStockModal()" style="
+            padding:4px 10px;
+            font-size:10px;
+          ">
+          Add New Stock Item
+        </button>
+      </div>
+      <table class="stock-table">
+        <thead>
+          <tr>
+            <th>Item Name</th>
+            <th>Unit</th>
+            <th>Opening</th>
+            <th>Current Balance</th>
+            <th>Min Limit</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="stockTableBody"></tbody>
+      </table>
+    </div>
+  </div>
