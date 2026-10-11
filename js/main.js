@@ -130,9 +130,20 @@ function switchView(
 
   else if (viewName === 'workers') {
 
-    renderWorkersView();
 
-  }
+renderWorkersView();
+
+
+}
+
+else if (viewName === 'onlineWorkers') {
+
+
+renderOnlineWorkersView();
+
+
+}
+
 
   else if (viewName === 'gamiya') {
 

@@ -96,16 +96,16 @@ function buildHawalkHtml(requests) {
 
     const items = Array.isArray(request.items)
       ? request.items.map(function (item) {
-          const name = escapeHtml(
-            item.itemName || item.name || 'Unknown item'
-          );
+        const name = escapeHtml(
+          item.itemName || item.name || 'Unknown item'
+        );
 
-          const quantity = Number(item.quantity || 0);
+        const quantity = Number(item.quantity || 0);
 
-          const unit = escapeHtml(item.unit || 'piece');
+        const unit = escapeHtml(item.unit || 'piece');
 
-          return `${name} × ${quantity} ${unit}`;
-        }).join('<br>')
+        return `${name} × ${quantity} ${unit}`;
+      }).join('<br>')
       : '-';
 
     return `
@@ -286,6 +286,35 @@ function buildShiftSnapshot() {
 
   return snapshot;
 }
+/*   =========================================================    
+                       shift display number 
+  ========================================================= */
+
+function getShiftDisplayNumber(shiftId) {
+  const sortedShifts = [...(shiftHistory || [])].sort(function (a, b) {
+    const dateA = new Date(
+      `${a.startDate || ''} ${a.startTime || ''}`
+    ).getTime();
+
+    const dateB = new Date(
+      `${b.startDate || ''} ${b.startTime || ''}`
+    ).getTime();
+
+    // Put shifts with unparseable dates at the end.
+    if (Number.isNaN(dateA)) return 1;
+    if (Number.isNaN(dateB)) return -1;
+
+    return dateA - dateB;
+  });
+
+  const index = sortedShifts.findIndex(function (shift) {
+    return String(shift.id) === String(shiftId);
+  });
+
+  return index === -1
+    ? String(shiftId)
+    : `Shift #${index + 1}`;
+}
 
 
 /* =========================================================
@@ -303,21 +332,21 @@ function printShiftReport(snapshot) {
 
   const salesRows = sales.length
     ? [...sales]
-        .sort(function (a, b) {
-          return Number(a.orderNum) - Number(b.orderNum);
-        })
-        .map(function (ord) {
-          const items = (ord.items || [])
-            .map(function (item) {
-              return (
-                (item.name || 'Item') +
-                ' x' +
-                (item.qty || 0)
-              );
-            })
-            .join(', ');
+      .sort(function (a, b) {
+        return Number(a.orderNum) - Number(b.orderNum);
+      })
+      .map(function (ord) {
+        const items = (ord.items || [])
+          .map(function (item) {
+            return (
+              (item.name || 'Item') +
+              ' x' +
+              (item.qty || 0)
+            );
+          })
+          .join(', ');
 
-          return `
+        return `
             <tr>
               <td>#${ord.orderNum}</td>
               <td>${ord.time || '-'}</td>
@@ -329,8 +358,8 @@ function printShiftReport(snapshot) {
               <td>${Number(ord.total || 0).toFixed(2)}</td>
             </tr>
           `;
-        })
-        .join('')
+      })
+      .join('')
     : `
         <tr>
           <td colspan="8">No sales</td>
@@ -339,8 +368,8 @@ function printShiftReport(snapshot) {
 
   const expenseRows = expenses.length
     ? expenses
-        .map(function (exp) {
-          return `
+      .map(function (exp) {
+        return `
             <tr>
               <td>${exp.date || '-'} ${exp.time || ''}</td>
               <td>${exp.name || '-'}</td>
@@ -349,8 +378,8 @@ function printShiftReport(snapshot) {
               <td>${exp.notes || '-'}</td>
             </tr>
           `;
-        })
-        .join('')
+      })
+      .join('')
     : `
         <tr>
           <td colspan="5">No expenses</td>
@@ -384,7 +413,7 @@ function printShiftReport(snapshot) {
   const html = `
     <html>
     <head>
-      <title>TUX Shift Report ${snapshot.id}</title>
+   <title>TUX Shift Report ${getShiftDisplayNumber(snapshot.id)}</title>
 
       <style>
         body {
@@ -460,11 +489,10 @@ function printShiftReport(snapshot) {
     <body>
       <h1>TUX - Shift Report</h1>
 
-      <div>
-        <strong>Shift:</strong>
-        ${snapshot.id}
-      </div>
-
+    <div>
+  <strong>Shift:</strong>
+  ${getShiftDisplayNumber(snapshot.id)}
+</div>
       <div>
         <strong>Start:</strong>
         ${snapshot.startDate} ${snapshot.startTime}
@@ -509,10 +537,10 @@ function printShiftReport(snapshot) {
         <div class="box">
           <strong>Daily Expenses</strong><br>
           ${Number(
-            snapshot.dailyExpenses ||
-            snapshot.totalExpenses ||
-            0
-          ).toFixed(2)} LE
+    snapshot.dailyExpenses ||
+    snapshot.totalExpenses ||
+    0
+  ).toFixed(2)} LE
         </div>
 
         <div class="box">
@@ -543,9 +571,9 @@ function printShiftReport(snapshot) {
         <div class="box">
           <strong>Profit</strong><br>
           ${(
-            Number(snapshot.bank || 0) -
-            Number(snapshot.overallExpenses || 0)
-          ).toFixed(2)} LE
+      Number(snapshot.bank || 0) -
+      Number(snapshot.overallExpenses || 0)
+    ).toFixed(2)} LE
         </div>
       </div>
 
@@ -621,12 +649,11 @@ function printShiftReport(snapshot) {
 
       <h2>Gam3ya</h2>
 
-      ${
-        buildGamiyaHtml(
-          snapshot.gamiyaSummary ||
-          buildGamiyaSummary(snapshot.gamiya, snapshot.id)
-        )
-      }
+      ${buildGamiyaHtml(
+      snapshot.gamiyaSummary ||
+      buildGamiyaSummary(snapshot.gamiya, snapshot.id)
+    )
+    }
 
 
       <h2>Hawalk Requests</h2>

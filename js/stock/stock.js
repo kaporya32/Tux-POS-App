@@ -1885,3 +1885,593 @@ function submitCount() {
   }
 
 }
+/* =========================================================
+   TUX POS — LOW STOCK ALERT
+   Informational only. Never blocks kitchen orders.
+   ========================================================= */
+
+
+/* =========================================================
+   GET LOW STOCK ITEMS
+   ========================================================= */
+
+function getLowStockItems() {
+
+  if (
+    typeof stockInventory === 'undefined' ||
+    !stockInventory
+  ) {
+    return [];
+  }
+
+  return Object.keys(stockInventory)
+    .map(function (key) {
+
+      const item = stockInventory[key];
+
+      if (!item) {
+        return null;
+      }
+
+      const current = Number(item.current);
+      const minimum = Number(item.min);
+
+      if (
+        !Number.isFinite(current) ||
+        !Number.isFinite(minimum)
+      ) {
+        return null;
+      }
+
+      if (current > minimum) {
+        return null;
+      }
+
+      return {
+        key: key,
+        name: String(item.name || 'Unnamed item'),
+        unit: String(item.unit || ''),
+        current: current,
+        minimum: minimum,
+        outOfStock: current <= 0
+      };
+
+    })
+    .filter(Boolean)
+    .sort(function (a, b) {
+
+      if (a.outOfStock !== b.outOfStock) {
+        return a.outOfStock ? -1 : 1;
+      }
+
+      return a.name.localeCompare(b.name);
+
+    });
+
+}
+
+
+/* =========================================================
+   CREATE LOW STOCK MODAL
+   ========================================================= */
+
+function ensureLowStockModal() {
+
+  let modal = document.getElementById(
+    'tuxLowStockModal'
+  );
+
+  if (modal) {
+    return modal;
+  }
+
+  modal = document.createElement('div');
+
+  modal.id = 'tuxLowStockModal';
+
+  modal.style.cssText = `
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    background: rgba(0, 0, 0, 0.78);
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    box-sizing: border-box;
+  `;
+
+  modal.innerHTML = `
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="tuxLowStockTitle"
+      style="
+        width: 100%;
+        max-width: 620px;
+        max-height: 85vh;
+        overflow: hidden;
+        background: #151522;
+        border: 1px solid #35354b;
+        border-radius: 12px;
+        box-shadow: 0 18px 60px rgba(0,0,0,.55);
+        color: #fff;
+        display: flex;
+        flex-direction: column;
+      "
+    >
+
+      <div style="
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 18px;
+        border-bottom: 1px solid #303044;
+      ">
+
+        <div>
+          <div
+            id="tuxLowStockTitle"
+            style="font-size: 18px; font-weight: 800;"
+          >
+            ⚠ Low Stock Alert
+          </div>
+
+          <div
+            id="tuxLowStockSubtitle"
+            style="font-size: 12px; color: #a5a5bb; margin-top: 5px;"
+          >
+            Items that need restocking
+          </div>
+        </div>
+
+        <button
+          type="button"
+          id="tuxLowStockClose"
+          aria-label="Close low stock alert"
+          style="
+            background: #29293a;
+            color: white;
+            border: 1px solid #41415a;
+            border-radius: 7px;
+            padding: 7px 11px;
+            cursor: pointer;
+            font-size: 16px;
+          "
+        >✕</button>
+
+      </div>
+
+      <div
+        id="tuxLowStockList"
+        style="
+          padding: 12px;
+          overflow-y: auto;
+          min-height: 100px;
+        "
+      ></div>
+
+      <div style="
+        padding: 12px 16px;
+        border-top: 1px solid #303044;
+        display: flex;
+        justify-content: flex-end;
+      ">
+        <button
+          type="button"
+          id="tuxLowStockDone"
+          style="
+            background: #c0392b;
+            color: #fff;
+            border: none;
+            border-radius: 7px;
+            padding: 9px 18px;
+            font-weight: 700;
+            cursor: pointer;
+          "
+        >Close</button>
+      </div>
+
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  modal.addEventListener('click', function (event) {
+
+    if (event.target === modal) {
+      closeLowStockModal();
+    }
+
+  });
+
+  modal.querySelector('#tuxLowStockClose')
+    .addEventListener('click', closeLowStockModal);
+
+  modal.querySelector('#tuxLowStockDone')
+    .addEventListener('click', closeLowStockModal);
+
+  document.addEventListener('keydown', function (event) {
+
+    if (
+      event.key === 'Escape' &&
+      modal.style.display === 'flex'
+    ) {
+      closeLowStockModal();
+    }
+
+  });
+
+  return modal;
+
+}
+
+
+/* =========================================================
+   RENDER LOW STOCK MODAL CONTENT
+   ========================================================= */
+
+function renderLowStockModalContent() {
+
+  const modal = ensureLowStockModal();
+
+  const list = modal.querySelector(
+    '#tuxLowStockList'
+  );
+
+  const subtitle = modal.querySelector(
+    '#tuxLowStockSubtitle'
+  );
+
+  const items = getLowStockItems();
+
+  subtitle.textContent =
+    items.length === 0
+      ? 'All stock items are above their minimum limits.'
+      : items.length + ' item(s) need attention';
+
+  if (items.length === 0) {
+
+    list.innerHTML = `
+      <div style="
+        padding: 30px 12px;
+        text-align: center;
+        color: #2ecc71;
+      ">
+        <div style="font-size: 34px; margin-bottom: 10px;">✓</div>
+        <div style="font-size: 16px; font-weight: 700;">
+          All stock levels look good
+        </div>
+        <div style="font-size: 12px; color: #a5a5bb; margin-top: 6px;">
+          No items are currently at or below their minimum limits.
+        </div>
+      </div>
+    `;
+
+    return;
+  }
+
+  list.innerHTML = items.map(function (item) {
+
+    const currentText =
+      item.current.toLocaleString(undefined, {
+        maximumFractionDigits: 4
+      });
+
+    const minimumText =
+      item.minimum.toLocaleString(undefined, {
+        maximumFractionDigits: 4
+      });
+
+    const color = item.outOfStock
+      ? '#ff5c5c'
+      : '#f0ad4e';
+
+    const status = item.outOfStock
+      ? 'OUT OF STOCK'
+      : 'LOW STOCK';
+
+    return `
+      <div style="
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px;
+        margin-bottom: 8px;
+        background: #1d1d2c;
+        border: 1px solid #35354b;
+        border-left: 4px solid ${color};
+        border-radius: 8px;
+      ">
+
+        <div style="min-width: 0;">
+
+          <div style="
+            font-size: 14px;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+          ">
+            ${escapeHtmlPw(item.name)}
+          </div>
+
+          <div style="
+            color: #aaaabe;
+            font-size: 12px;
+            margin-top: 5px;
+          ">
+            Current:
+            <strong style="color: ${color};">
+              ${escapeHtmlPw(currentText)}
+            </strong>
+            ${escapeHtmlPw(item.unit)}
+            <span style="padding: 0 5px;">·</span>
+            Minimum:
+            ${escapeHtmlPw(minimumText)}
+            ${escapeHtmlPw(item.unit)}
+          </div>
+
+        </div>
+
+        <span style="
+          flex-shrink: 0;
+          color: ${color};
+          background: ${item.outOfStock
+            ? 'rgba(255,92,92,.12)'
+            : 'rgba(240,173,78,.12)'};
+          border: 1px solid ${color};
+          padding: 5px 7px;
+          border-radius: 5px;
+          font-size: 9px;
+          font-weight: 800;
+          white-space: nowrap;
+        ">
+          ${status}
+        </span>
+
+      </div>
+    `;
+
+  }).join('');
+
+}
+
+
+/* =========================================================
+   OPEN / CLOSE LOW STOCK MODAL
+   ========================================================= */
+
+function openLowStockModal() {
+
+  const modal = ensureLowStockModal();
+
+  renderLowStockModalContent();
+
+  modal.style.display = 'flex';
+
+}
+
+
+function closeLowStockModal() {
+
+  const modal = document.getElementById(
+    'tuxLowStockModal'
+  );
+
+  if (modal) {
+    modal.style.display = 'none';
+  }
+
+}
+
+
+/* =========================================================
+   NAVBAR BUTTON
+   Creates the button if the navbar is available.
+   ========================================================= */
+
+function renderLowStockNavbarButton() {
+
+  const existingButton = document.getElementById(
+    'tuxLowStockNavbarButton'
+  );
+
+  if (existingButton) {
+
+    updateLowStockNavbarButton();
+
+    return;
+
+  }
+
+  /*
+   * Find a common navbar element.
+   * If your navbar uses a different structure,
+   * the button can be placed manually in navigation.html.
+   */
+
+  const nav =
+    document.querySelector('.top-nav') ||
+    document.querySelector('.navbar') ||
+    document.querySelector('nav');
+
+  if (!nav) {
+    return;
+  }
+
+  const button = document.createElement('button');
+
+  button.id = 'tuxLowStockNavbarButton';
+  button.type = 'button';
+
+  button.style.cssText = `
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    background: #29202a;
+    color: #fff;
+    border: 1px solid #754044;
+    border-radius: 7px;
+    padding: 7px 10px;
+    margin: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  `;
+
+  button.innerHTML = `
+    <span>⚠ Low Stock</span>
+    <span
+      id="tuxLowStockBadge"
+      style="
+        display: none;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 4px;
+        box-sizing: border-box;
+        align-items: center;
+        justify-content: center;
+        background: #e74c3c;
+        color: #fff;
+        border-radius: 10px;
+        font-size: 10px;
+        font-weight: 800;
+      "
+    >0</span>
+  `;
+
+  button.addEventListener('click', openLowStockModal);
+
+  nav.appendChild(button);
+
+  updateLowStockNavbarButton();
+
+}
+
+
+/* =========================================================
+   UPDATE NAVBAR BADGE
+   ========================================================= */
+
+function updateLowStockNavbarButton() {
+
+  const button = document.getElementById(
+    'tuxLowStockNavbarButton'
+  );
+
+  const badge = document.getElementById(
+    'tuxLowStockBadge'
+  );
+
+  if (!button || !badge) {
+    return;
+  }
+
+  const count = getLowStockItems().length;
+
+  badge.textContent = String(count);
+
+  badge.style.display =
+    count > 0
+      ? 'inline-flex'
+      : 'none';
+
+  button.style.borderColor =
+    count > 0
+      ? '#e74c3c'
+      : '#41415a';
+
+}
+
+
+/* =========================================================
+   REFRESH LOW STOCK ALERT
+   Called by stock rendering and after navbar loads.
+   ========================================================= */
+
+function renderCashierLowStockAlert() {
+
+  updateLowStockNavbarButton();
+
+  const modal = document.getElementById(
+    'tuxLowStockModal'
+  );
+
+  if (
+    modal &&
+    modal.style.display === 'flex'
+  ) {
+    renderLowStockModalContent();
+  }
+
+}
+
+
+/* =========================================================
+   INITIALIZE LOW STOCK FEATURE
+   ========================================================= */
+
+function initLowStockAlert() {
+
+  renderLowStockNavbarButton();
+
+  ensureLowStockModal();
+
+  updateLowStockNavbarButton();
+
+}
+
+
+/* =========================================================
+   RETRY INITIALIZATION
+   Supports HTML components loaded asynchronously.
+   ========================================================= */
+
+(function startLowStockAlertInitialization() {
+
+  function initialize() {
+
+    initLowStockAlert();
+
+  }
+
+  if (document.readyState === 'loading') {
+
+    document.addEventListener(
+      'DOMContentLoaded',
+      initialize,
+      { once: true }
+    );
+
+  } else {
+
+    initialize();
+
+  }
+
+  /*
+   * The navbar is loaded asynchronously in this project.
+   * Retry briefly until it becomes available.
+   */
+
+  let attempts = 0;
+
+  const timer = setInterval(function () {
+
+    renderLowStockNavbarButton();
+
+    attempts++;
+
+    if (
+      document.getElementById('tuxLowStockNavbarButton') ||
+      attempts >= 30
+    ) {
+      clearInterval(timer);
+    }
+
+  }, 500);
+
+})();

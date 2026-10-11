@@ -223,8 +223,8 @@ function applyHawalkRoleUI() {
 
     navHawalk.style.display =
       role === 'worker' ||
-      role === 'admin' ||
-      role === 'tuxadmin'
+        role === 'admin' ||
+        role === 'tuxadmin'
         ? ''
         : 'none';
 
@@ -285,7 +285,7 @@ function applyHawalkRoleUI() {
 
     adminSection.style.display =
       role === 'admin' ||
-      role === 'tuxadmin'
+        role === 'tuxadmin'
         ? ''
         : 'none';
 
@@ -517,6 +517,10 @@ async function renderHawalkWorkerRequestTable() {
 
       /* AVAILABLE */
 
+
+
+
+
       const availableTd =
         document.createElement('td');
 
@@ -534,6 +538,7 @@ async function renderHawalkWorkerRequestTable() {
       availableTd.style.color =
         '#2ecc71';
 
+      availableTd.style.textAlign = 'center';
 
       tr.appendChild(
         availableTd
@@ -699,6 +704,7 @@ async function renderHawalkWorkerRequestTable() {
           item.unit || 'piece'
         );
 
+        unitTd.style.textAlign = "center";
 
       tr.appendChild(
         unitTd
@@ -1037,8 +1043,8 @@ async function renderHawalkAdminRequests() {
       const date =
         request.created_at
           ? new Date(
-              request.created_at
-            ).toLocaleString()
+            request.created_at
+          ).toLocaleString()
           : '-';
 
 
@@ -1053,26 +1059,26 @@ async function renderHawalkAdminRequests() {
       const itemText =
         items.length
           ? items
-              .map(
-                function (item) {
+            .map(
+              function (item) {
 
-                  return (
-                    escapeHawalkHtml(
-                      item.itemName
-                    ) +
-                    ' × ' +
-                    formatHawalkNumber(
-                      item.quantity
-                    ) +
-                    ' ' +
-                    escapeHawalkHtml(
-                      item.unit || ''
-                    )
-                  );
+                return (
+                  escapeHawalkHtml(
+                    item.itemName
+                  ) +
+                  ' × ' +
+                  formatHawalkNumber(
+                    item.quantity
+                  ) +
+                  ' ' +
+                  escapeHawalkHtml(
+                    item.unit || ''
+                  )
+                );
 
-                }
-              )
-              .join('<br>')
+              }
+            )
+            .join('<br>')
           : '-';
 
 
@@ -1194,8 +1200,8 @@ async function renderHawalkAdminRequests() {
           <td>
             <strong>
               ${escapeHawalkHtml(
-                request.worker_name || '-'
-              )}
+          request.worker_name || '-'
+        )}
             </strong>
           </td>
 

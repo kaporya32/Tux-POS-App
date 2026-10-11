@@ -2280,26 +2280,26 @@ function getCashierLowStockItems(orderItems) {
    DISPLAY ORDER-SPECIFIC STOCK SHORTAGES
    ========================================================= */
 
-function showCashierLowStockPopup(items) {
-  if (!Array.isArray(items) || items.length === 0) {
-    return;
-  }
+  function showCashierLowStockPopup(items) {
+    if (!Array.isArray(items) || items.length === 0) {
+      return;
+    }
 
-  const details = items.map(function (item) {
-    const unit = item.unit ? ' ' + item.unit : '';
+    const details = items.map(function (item) {
+      const unit = item.unit ? ' ' + item.unit : '';
 
-    return (
-      '• ' + item.name + '\n' +
-      '  Required: ' + item.required + unit + '\n' +
-      '  Available: ' + item.current + unit + '\n' +
-      '  Short by: ' + item.shortBy + unit
+      return (
+        '• ' + item.name + '\n' +
+        '  Required: ' + item.required + unit + '\n' +
+        '  Available: ' + item.current + unit + '\n' +
+        '  Short by: ' + item.shortBy + unit
+      );
+    }).join('\n\n');
+
+    alert(
+      'CANNOT SEND ORDER TO KITCHEN\n\n' +
+      'The current order requires more stock than is available:\n\n' +
+      details +
+      '\n\nPlease update the stock before sending this order.'
     );
-  }).join('\n\n');
-
-  alert(
-    'CANNOT SEND ORDER TO KITCHEN\n\n' +
-    'The current order requires more stock than is available:\n\n' +
-    details +
-    '\n\nPlease update the stock before sending this order.'
-  );
-}
+  }

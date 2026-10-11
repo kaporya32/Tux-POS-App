@@ -718,6 +718,7 @@ function clearOrder() {
    4. Save and send the order.
    ========================================================= */
 
+
 async function sendOrder() {
   if (
     blockTuxPosCashierMutation(
@@ -746,7 +747,7 @@ async function sendOrder() {
   }
 
   /* =====================================================
-     STEP 1 — VALIDATE PAYMENT FIRST
+     STEP 1 — VALIDATE PAYMENT
      ===================================================== */
 
   const total =
@@ -826,46 +827,9 @@ async function sendOrder() {
   }
 
   /* =====================================================
-     STEP 3 — CHECK REQUIRED INGREDIENT STOCK
-     ===================================================== */
-
-  let lowStockItems;
-
-  try {
-    lowStockItems =
-      getCashierLowStockItems(currentOrder);
-  } catch (error) {
-    console.error(
-      'TUX POS — Stock validation failed:',
-      error
-    );
-
-    alert(
-      'Could not verify stock availability. ' +
-      'The order was not sent.\n\n' +
-      (error.message || String(error))
-    );
-
-    return;
-  }
-
-  if (
-    !Array.isArray(lowStockItems)
-  ) {
-    alert(
-      'Could not verify stock availability. ' +
-      'The order was not sent.'
-    );
-    return;
-  }
-
-  if (lowStockItems.length > 0) {
-    showCashierLowStockPopup(lowStockItems);
-    return;
-  }
-
-  /* =====================================================
-     STEP 4 — PREPARE ORDER
+     STEP 3 — PREPARE ORDER
+     Stock availability does NOT block orders.
+     Stock is allowed to become negative.
      ===================================================== */
 
   const currentWorker = activeWorkers[0];
@@ -899,7 +863,7 @@ async function sendOrder() {
   };
 
   /* =====================================================
-     STEP 5 — SAVE TO SUPABASE
+     STEP 4 — SAVE TO SUPABASE
      ===================================================== */
 
   let savedOrder;
@@ -928,7 +892,7 @@ async function sendOrder() {
   }
 
   /* =====================================================
-     STEP 6 — UPDATE LOCAL ORDER LISTS
+     STEP 5 — UPDATE LOCAL ORDER LISTS
      ===================================================== */
 
   orderData.supabaseId = savedOrder.id;
@@ -947,6 +911,8 @@ async function sendOrder() {
 
   clearOrder();
 }
+
+
 /* =========================================================
    GAM3YA
    ========================================================= */

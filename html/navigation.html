@@ -1,34 +1,130 @@
+
 <div class="top-nav">
-    <div class="nav-brand"><span>TUX</span></div>
-
-    <div class="nav-tabs">
-        <button class="nav-btn active" id="navCashier" onclick="switchView('cashier', this)">Cashier</button>
-        <button class="nav-btn" id="navBoard" onclick="switchView('board', this)">Kitchen Board</button>
-        <button class="nav-btn" id="navExpenses" onclick="switchView('expenses', this)"
-            style="background:#c0392b;color:white;">Expenses &amp; Purchases</button>
-        <button class="nav-btn" id="navSales" onclick="switchView('sales', this)">Reports</button>
-        <button class="nav-btn" id="navStock" onclick="switchView('stock', this)">Stock</button>
-        <button class="nav-btn" id="navHawalk" onclick="switchView('hawalk', this)"
-            style="background:#8e44ad;color:white;">Hawalk</button>
-        <button class="nav-btn" id="navWorkers" onclick="switchView('workers', this)"
-            style="background:#8e44ad;color:white;">Workers</button>
-        <button class="nav-btn" id="navGamiya" onclick="switchView('gamiya', this)"
-            style="background:#16a085;color:white;">Gam3ya</button>
-        <button class="nav-btn" id="navSettings" onclick="switchView('settings', this)"
-            style="background:#2c3e50;color:#f1c40f;">Settings</button>
-
-        <div class="shift-controls">
-            <span class="shift-status" id="shiftStatus">Shift Not Started</span>
-            <button class="shift-btn shift-start" id="startShiftBtn" onclick="startShift()">▶ Start Shift</button>
-            <button class="shift-btn shift-end" id="endShiftBtn" onclick="endShift()">■ End Shift</button>
-        </div>
-
-        <div class="staff-login-box">
-            <span class="staff-status" id="staffStatus">Not Logged In</span>
-            <button class="staff-login-btn" id="staffLoginBtn" onclick="openStaffLogin()">👤 Staff Login</button>
-            <button class="staff-logout-btn" id="staffLogoutBtn" onclick="openStaffLogout()">Logout</button>
-        </div>
+    <div class="nav-brand">
+        <span>TUX</span>
     </div>
 
-    <div class="nav-clock" id="liveClock">25 Sep 2026</div>
+    <div class="nav-tabs">
+
+        <button
+            class="nav-btn active"
+            id="navCashier"
+            onclick="switchView('cashier', this)">
+            Cashier
+        </button>
+
+        <button
+            class="nav-btn"
+            id="navBoard"
+            onclick="switchView('board', this)">
+            Kitchen Board
+        </button>
+
+        <button
+            class="nav-btn"
+            id="navExpenses"
+            onclick="switchView('expenses', this)"
+            style="background:#c0392b;color:white;">
+            Expenses &amp; Purchases
+        </button>
+
+        <button
+            class="nav-btn"
+            id="navSales"
+            onclick="switchView('sales', this)">
+            Reports
+        </button>
+
+        <button
+            class="nav-btn"
+            id="navStock"
+            onclick="switchView('stock', this)">
+            Stock
+        </button>
+
+        <button
+            class="nav-btn"
+            id="navHawalk"
+            onclick="switchView('hawalk', this)"
+            style="background:#8e44ad;color:white;">
+            Hawalk
+        </button>
+
+        <button
+            class="nav-btn"
+            id="navWorkers"
+            onclick="switchView('workers', this)"
+            style="background:#8e44ad;color:white;">
+            Workers
+        </button>
+
+        <!-- ONLINE WORKERS: ADMIN AND TUX ADMIN ONLY -->
+
+       
+
+        <button
+            class="nav-btn"
+            id="navGamiya"
+            onclick="switchView('gamiya', this)"
+            style="background:#16a085;color:white;">
+            Gam3ya
+        </button>
+
+        <button
+            class="nav-btn"
+            id="navSettings"
+            onclick="switchView('settings', this)"
+            style="background:#2c3e50;color:#f1c40f;">
+            Settings
+        </button>
+
+        <!-- SHIFT CONTROLS -->
+
+        <div class="shift-controls">
+            <span class="shift-status" id="shiftStatus">
+                Shift Not Started
+            </span>
+
+            <button
+                class="shift-btn shift-start"
+                id="startShiftBtn"
+                onclick="startShift()">
+                ▶ Start Shift
+            </button>
+
+            <button
+                class="shift-btn shift-end"
+                id="endShiftBtn"
+                onclick="endShift()">
+                ■ End Shift
+            </button>
+        </div>
+
+        <!-- STAFF LOGIN -->
+
+        <div class="staff-login-box">
+            <span class="staff-status" id="staffStatus">
+                Not Logged In
+            </span>
+
+            <button
+                class="staff-login-btn"
+                id="staffLoginBtn"
+                onclick="openStaffLogin()">
+                👤 Staff Login
+            </button>
+
+            <button
+                class="staff-logout-btn"
+                id="staffLogoutBtn"
+                onclick="openStaffLogout()">
+                Logout
+            </button>
+        </div>
+
+    </div>
+
+    <div class="nav-clock" id="liveClock">
+        25 Sep 2026
+    </div>
 </div>

@@ -589,23 +589,31 @@ async function createShiftInSupabase() {
    COMPLETE SHIFT IN SUPABASE
    ========================================================= */
 
+
 async function completeShiftInSupabase() {
-  if (
-    blockTuxPosShiftsMutation('end the shift')
-  ) {
+  if (blockTuxPosShiftsMutation('end the shift')) {
     return false;
   }
 
-  if (
-    !currentShift ||
-    !currentShift.supabaseId
-  ) {
+  // Capture the active shift before any asynchronous operation.
+  const shift = currentShift;
+
+  if (!shift || !shift.supabaseId) {
+    console.error(
+      'TUX POS — Cannot complete shift: active shift or Supabase ID is missing.',
+      { currentShift: shift }
+    );
+
     alert(
-      'The active shift could not be found in Supabase.'
+      'The active shift could not be found in Supabase.\n\n' +
+      'Please refresh the page and check the active shift before trying again.'
     );
 
     return false;
   }
+
+  // Keep a stable ID even if currentShift changes while awaiting.
+  const shiftId = shift.supabaseId;
 
   try {
     const stockSynced =
@@ -625,7 +633,7 @@ async function completeShiftInSupabase() {
         status: 'closed',
         closing_count: null
       })
-      .eq('id', currentShift.supabaseId)
+      .eq('id', shiftId)
       .eq('status', 'open')
       .select('*')
       .maybeSingle();
@@ -659,8 +667,18 @@ async function completeShiftInSupabase() {
       return false;
     }
 
-    currentShift.endCount = null;
-    currentShift.active = false;
+    // Update the captured shift object, not a possibly changed global.
+    shift.endCount = null;
+    shift.active = false;
+
+    // Clear the global only if it still refers to this shift.
+    if (
+      currentShift &&
+      String(currentShift.supabaseId) === String(shiftId)
+    ) {
+      currentShift.endCount = null;
+      currentShift.active = false;
+    }
 
     await loadShiftHistoryFromSupabase();
 
@@ -678,12 +696,13 @@ async function completeShiftInSupabase() {
 
     alert(
       'Could not end the shift.\n\n' +
-      error.message
+      (error?.message || String(error))
     );
 
     return false;
   }
 }
+
 
 
 /* =========================================================

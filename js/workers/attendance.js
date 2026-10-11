@@ -247,23 +247,77 @@ function renderSelectedWorker() {
   container.innerHTML = html;
 
 }
-function resetAttendanceHistory() {
-
-  if (getActiveRole() !== 'tuxadmin') {
-    alert('Only Tux Admin can reset the attendance history.');
+// attendence history
+async function resetAttendanceHistory() {
+  if (
+    typeof getActiveRole !== 'function' ||
+    getActiveRole() !== 'tuxadmin'
+  ) {
+    alert('Only Tux Admin can reset attendance history.');
     return;
   }
 
-  if (!confirm('Delete ALL workers attendance history?\n\nWorkers who are logged in right now will keep their current session.')) return;
+  const confirmed = window.confirm(
+    'RESET ATTENDANCE HISTORY?\n\n' +
+    'All completed attendance records will be deleted.\n' +
+    'Worker accounts will remain unchanged.\n' +
+    'Workers currently working will keep their active sessions.\n\n' +
+    'This action cannot be undone. Continue?'
+  );
 
-  workersList.forEach(function (w) {
-    w.attendance = (w.attendance || []).filter(function (r) {
-      return r.checkIn && !r.checkOut && isStaffLoggedIn(w.id);
-    });
-  });
+  if (!confirmed) return;
 
-  saveWorkersToStorage();
-  renderWorkersView();
+  const button = document.getElementById('attendanceResetBtn');
 
-  alert('Attendance history was reset.');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Resetting...';
+  }
+
+  try {
+    // Delete completed attendance records from Supabase.
+    // Open sessions are preserved.
+    const { error } = await supabaseClient
+      .from('attendance')
+      .delete()
+      .or('check_out.not.is.null,status.eq.completed');
+
+    if (error) {
+      throw error;
+    }
+
+    // Reload the real database data on this device.
+    await loadAllAttendance();
+
+    // Refresh the Workers page.
+    if (typeof renderWorkersView === 'function') {
+      await renderWorkersView();
+    }
+
+    if (typeof renderSelectedWorker === 'function') {
+      renderSelectedWorker();
+    }
+
+    // Notify other parts of the app.
+    window.dispatchEvent(
+      new CustomEvent('tux-attendance-updated')
+    );
+
+    alert('Completed attendance history has been reset.');
+  } catch (error) {
+    console.error(
+      'TUX POS — Attendance reset failed:',
+      error
+    );
+
+    alert(
+      'Failed to reset attendance history.\n\n' +
+      (error.message || 'Check the console and Supabase permissions.')
+    );
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = '♻ Reset Attendance History';
+    }
+  }
 }

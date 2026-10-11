@@ -98,9 +98,9 @@ function mapGamiyaRecords(
               return String(
                 item.gamiya_order_id
               ) ===
-              String(
-                order.id
-              );
+                String(
+                  order.id
+                );
 
             }
           )
@@ -134,8 +134,8 @@ function mapGamiyaRecords(
       const createdAt =
         order.created_at
           ? new Date(
-              order.created_at
-            )
+            order.created_at
+          )
           : new Date();
 
 
@@ -360,7 +360,7 @@ async function saveGamiyaToSupabase(
 
     const workerId =
       record.workerId &&
-      String(record.workerId) !==
+        String(record.workerId) !==
         'admin_account'
 
         ? record.workerId
@@ -569,27 +569,27 @@ async function saveGamiyaToSupabase(
       time:
         order.created_at
           ? new Date(
-              order.created_at
-            ).toLocaleTimeString(
-              [],
-              {
-                hour: '2-digit',
-                minute: '2-digit'
-              }
-            )
+            order.created_at
+          ).toLocaleTimeString(
+            [],
+            {
+              hour: '2-digit',
+              minute: '2-digit'
+            }
+          )
           : new Date().toLocaleTimeString(
-              [],
-              {
-                hour: '2-digit',
-                minute: '2-digit'
-              }
-            ),
+            [],
+            {
+              hour: '2-digit',
+              minute: '2-digit'
+            }
+          ),
 
       date:
         order.created_at
           ? new Date(
-              order.created_at
-            ).toLocaleDateString()
+            order.created_at
+          ).toLocaleDateString()
           : new Date().toLocaleDateString(),
 
       createdAt:
@@ -1083,3 +1083,69 @@ function stopGamiyaRealtime() {
   );
 
 }
+
+/*  handle reset button */
+
+
+
+
+
+async function handleResetGamiya() {
+  if (
+    typeof getActiveRole !== 'function' ||
+    getActiveRole() !== 'tuxadmin'
+  ) {
+    alert('Only Tux Admin can reset Gam3ya.');
+    return;
+  }
+
+  if (
+    !window.confirm(
+      'This will permanently delete all Gam3ya orders and meal items.\n\nAre you sure?'
+    )
+  ) {
+    return;
+  }
+
+  const button = document.getElementById('gamiyaResetBtn');
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Resetting...';
+  }
+
+  try {
+    const success = await resetGamiyaInSupabase();
+
+    if (success) {
+      alert('Gam3ya data reset successfully.');
+    }
+  } catch (error) {
+    console.error('TUX POS — Gam3ya reset failed:', error);
+    alert('Failed to reset Gam3ya data.');
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = '♻ Reset All Data';
+    }
+  }
+}
+
+// separated function
+
+function updateGamiyaResetButtonVisibility() {
+  const button = document.getElementById('gamiyaResetBtn');
+
+  if (!button) return;
+
+  button.style.display =
+    typeof getActiveRole === 'function' &&
+    getActiveRole() === 'tuxadmin'
+      ? 'inline-block'
+      : 'none';
+}
+
+document.addEventListener(
+  'DOMContentLoaded',
+  updateGamiyaResetButtonVisibility
+);

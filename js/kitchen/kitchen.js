@@ -743,25 +743,10 @@ function renderKitchenBoard() {
             "
           >
 
-            <strong
-              style="
-                font-size: 13px;
-                color: #bdbdbd;
-              "
-            >
-              Payment
-            </strong>
+         
 
 
-            <strong
-              style="
-                font-size: 13px;
-                color: #ffffff;
-                text-align: right;
-              "
-            >
-              ${paymentMethod}
-            </strong>
+        
 
           </div>
 
@@ -1043,168 +1028,162 @@ async function loadKitchenOrders() {
    PRINT KITCHEN ORDER
    ========================================================= */
 
+
+/* =========================================================
+   PRINT KITCHEN ORDER
+   Prints order items, extras, and total only.
+   ========================================================= */
+
+
+
 function printKitchenOrder(index) {
+  const ord = kitchenOrders[index];
 
-  const ord =
-    kitchenOrders[index];
-
-  if (!ord) return;
-
-
-  const printArea =
-    document.getElementById(
-      'printArea'
-    );
-
-  if (!printArea) return;
-
+  if (!ord) {
+    alert('Order not found.');
+    return;
+  }
 
   let itemsHtml = '';
 
+  (Array.isArray(ord.items) ? ord.items : []).forEach(function (it) {
+    const qty = Number(it.qty || 1);
+    const itemTotal = Number(it.price || 0) * qty;
 
-  if (
-    Array.isArray(ord.items)
-  ) {
+    itemsHtml += `
+      <div class="item">
+        <span>${escapeKitchenPrintText(it.name)} × ${qty}</span>
+        <strong>${itemTotal.toFixed(2)} LE</strong>
+      </div>
+    `;
 
-    ord.items.forEach(
-      function (it) {
+    (Array.isArray(it.extras) ? it.extras : []).forEach(function (extra) {
+      const name = getKitchenExtraName(extra);
+      if (!name) return;
 
-        itemsHtml += `
+      itemsHtml += `
+        <div class="extra">
+          <span>+ ${escapeKitchenPrintText(name)}</span>
+          <span>${getKitchenExtraPrice(extra).toFixed(2)} LE</span>
+        </div>
+      `;
+    });
+  });
 
-          <div style="
-            display: flex;
-            justify-content: space-between;
-            border-bottom: 1px dashed #ccc;
-            padding: 6px 0;
-          ">
+  const date = ord.createdAt
+    ? new Date(ord.createdAt).toLocaleString()
+    : (ord.time || '-');
 
-            <span>
-              ${it.name} (x${it.qty})
-            </span>
-
-            <span>
-              ${(
-                Number(it.price || 0) *
-                Number(it.qty || 1)
-              ).toFixed(2)} LE
-            </span>
-
-          </div>
-
-        `;
-
-      }
-    );
-
-  }
-
-
-  printArea.innerHTML = `
-
-    <div style="
-      text-align: center;
-      font-weight: bold;
-      font-size: 20px;
-      margin-bottom: 5px;
-    ">
-
-      TUX POS SYSTEM
-
-    </div>
-
-
-    <div style="
-      text-align: center;
-      font-size: 14px;
-      margin-bottom: 12px;
-    ">
-
-      Kitchen / Cashier Receipt
-
-    </div>
-
-
-    <hr
-      style="
-        border: 1px dashed #000;
-      "
-    >
-
-
-    <div style="
-      display: flex;
-      justify-content: space-between;
-      font-weight: bold;
-      margin-bottom: 8px;
-      font-size: 14px;
-    ">
-
-      <span>
-        Order #: #${ord.orderNum}
-      </span>
-
-      <span>
-        Time: ${ord.time || '-'}
-      </span>
-
-    </div>
-
-
-    <hr
-      style="
-        border: 1px dashed #000;
-      "
-    >
-
-
-    <div style="
-      margin-bottom: 12px;
-    ">
-
-      ${itemsHtml}
-
-    </div>
-
-
-    <hr
-      style="
-        border: 1px dashed #000;
-      "
-    >
-
-
-    <div style="
-      display: flex;
-      justify-content: space-between;
-      font-weight: bold;
-      font-size: 16px;
-      margin-top: 8px;
-    ">
-
-      <span>
-        Grand Total:
-      </span>
-
-      <span>
-        ${Number(ord.total || 0).toFixed(2)} LE
-      </span>
-
-    </div>
-
-
-    <div style="
-      text-align: center;
-      margin-top: 25px;
-      font-size: 12px;
-    ">
-
-      Thank you!
-
-    </div>
-
+  const receipt = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Order #${Number(ord.orderNum)}</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          color: #000;
+          background: #fff;
+          padding: 15px;
+          font-size: 14px;
+        }
+        .receipt {
+          width: 100%;
+          max-width: 340px;
+          margin: 0 auto;
+        }
+        h1 {
+          text-align: center;
+          margin: 0 0 5px;
+          font-size: 26px;
+        }
+        .subtitle {
+          text-align: center;
+          margin-bottom: 15px;
+        }
+        .meta {
+          display: flex;
+          justify-content: space-between;
+          gap: 10px;
+          margin: 12px 0;
+        }
+        .item, .extra, .total {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 7px 0;
+        }
+        .extra {
+          padding-left: 12px;
+          font-size: 12px;
+        }
+        .divider {
+          border-top: 1px dashed #000;
+          margin: 10px 0;
+        }
+        .total {
+          font-weight: bold;
+          font-size: 18px;
+        }
+        @media print {
+          body { padding: 0; }
+          .receipt { max-width: none; }
+        }
+      </style>
+    </head>
+    <body>
+      <main class="receipt">
+        <h1>TUX</h1>
+        <div class="subtitle">Kitchen Order</div>
+        <div class="divider"></div>
+        <div class="meta">
+          <strong>Order #${Number(ord.orderNum)}</strong>
+          <span>${escapeKitchenPrintText(date)}</span>
+        </div>
+        <div class="divider"></div>
+        ${itemsHtml}
+        <div class="divider"></div>
+        <div class="total">
+          <span>Order Total</span>
+          <span>${Number(ord.total || 0).toFixed(2)} LE</span>
+        </div>
+      </main>
+      <script>
+        window.onload = function () {
+          window.focus();
+          window.print();
+        };
+        window.onafterprint = function () {
+          window.close();
+        };
+      <\/script>
+    </body>
+    </html>
   `;
 
+  const printWindow = window.open('', '_blank');
 
-  window.print();
+  if (!printWindow) {
+    alert('The print window was blocked. Allow pop-ups for your TUX POS website and try again.');
+    return;
+  }
 
+  printWindow.document.open();
+  printWindow.document.write(receipt);
+  printWindow.document.close();
+}
+
+
+/* Safely display text supplied by an order. */
+function escapeKitchenPrintText(value) {
+  return String(value ?? '').replace(/[&<>"']/g, function (char) {
+    return {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[char];
+  });
 }

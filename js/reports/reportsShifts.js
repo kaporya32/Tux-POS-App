@@ -4,7 +4,8 @@
    Start Shift / End Shift
    Supabase persistence and immediate UI refresh
    ========================================================= */
-
+let isStartingShift = false;
+let isEndingShift = false;
 
 /* =========================================================
    SHIFT MANAGEMENT
@@ -172,53 +173,104 @@ async function refreshShiftReports() {
   }
 
 }
+/* =========================================================
+   TUX POS — SHIFT CONFIRMATION MODAL
+   ========================================================= */
 
+let tuxShiftConfirmCallback = null;
+let tuxShiftConfirmPreviousFocus = null;
+
+function openShiftConfirmModal(options) {
+  const modal = document.getElementById('shiftConfirmModal');
+  const title = document.getElementById('shiftConfirmTitle');
+  const message = document.getElementById('shiftConfirmMessage');
+  const cancelBtn = document.getElementById('shiftConfirmCancelBtn');
+  const actionBtn = document.getElementById('shiftConfirmActionBtn');
+
+  if (!modal || !title || !message || !cancelBtn || !actionBtn) {
+    console.error('TUX POS: Shift confirmation modal elements are missing.');
+    alert(options.message || 'Please confirm this action.');
+    return Promise.resolve(false);
+  }
+
+  if (modal.style.display !== 'none' && tuxShiftConfirmCallback) {
+    return Promise.resolve(false);
+  }
+
+  tuxShiftConfirmPreviousFocus = document.activeElement;
+
+  title.textContent = options.title || 'Confirm Action';
+  message.textContent = options.message || '';
+  cancelBtn.textContent = options.cancelText || 'Cancel';
+  actionBtn.textContent = options.confirmText || 'Confirm';
+
+  actionBtn.style.background = options.confirmColor || '#e74c3c';
+
+  modal.style.display = 'flex';
+
+  tuxShiftConfirmCallback = null;
+
+  return new Promise((resolve) => {
+    tuxShiftConfirmCallback = async (confirmed) => {
+      tuxShiftConfirmCallback = null;
+      modal.style.display = 'none';
+
+      if (tuxShiftConfirmPreviousFocus?.isConnected) {
+        tuxShiftConfirmPreviousFocus.focus();
+      }
+
+      tuxShiftConfirmPreviousFocus = null;
+
+      resolve(confirmed);
+
+      if (confirmed && typeof options.onConfirm === 'function') {
+        try {
+          await options.onConfirm();
+        } catch (error) {
+          console.error('TUX POS: Confirmed shift action failed:', error);
+        }
+      }
+    };
+
+    actionBtn.focus();
+  });
+}
+
+function closeShiftConfirmModal() {
+  if (typeof tuxShiftConfirmCallback === 'function') {
+    tuxShiftConfirmCallback(false);
+  }
+}
+
+function confirmShiftModalAction() {
+  if (typeof tuxShiftConfirmCallback === 'function') {
+    tuxShiftConfirmCallback(true);
+  }
+}
 
 /* =========================================================
    START SHIFT
    ========================================================= */
 
-function startShift() {
 
-  if (
-    getActiveRole() ===
-    'admin'
-  ) {
+async function startShift() {
+  // Prevent duplicate Start Shift operations.
+  if (isStartingShift || isEndingShift) return;
 
-    alert(
-      'Admin is in Spectate Mode. You cannot start a shift.'
-    );
-
+  if (getActiveRole() === 'admin') {
+    alert('Admin is in Spectate Mode. You cannot start a shift.');
     return;
-
   }
 
-  if (
-    currentShift &&
-    currentShift.active
-  ) {
-
-    alert(
-      'There is already an active shift.'
-    );
-
+  if (currentShift && currentShift.active) {
+    alert('There is already an active shift.');
     return;
-
   }
 
-  if (
-    getActiveWorkers().length === 0 &&
-    !tuxAdminActive
-  ) {
-
-    alert(
-      'Please login as staff first, then start the shift.'
-    );
-
+  if (getActiveWorkers().length === 0 && !tuxAdminActive) {
+    alert('Please login as staff first, then start the shift.');
     openStaffLogin();
-
     return;
-
   }
 
   const hasOldData =
@@ -227,25 +279,56 @@ function startShift() {
     expensesList.length > 0;
 
   const startMsg =
-    '▶ START SHIFT\n\n' +
     'Are you sure you want to start a new shift?' +
     (
       hasOldData
         ? '\n\nThe previous current-day data (orders, kitchen board, expenses) will be cleared. Saved Shift History and Gam3ya will NOT be deleted.'
-        : ''
+        : '\n\nOrder numbering will restart from Order #1.'
     );
 
-  if (
-    !confirm(startMsg)
-  ) {
+  const confirmed = await openShiftConfirmModal({
+    title: '▶ Start Shift',
+    message: startMsg,
+    confirmText: 'Start Shift',
+    confirmColor: '#16a085'
+  });
 
+  if (!confirmed) return;
+
+  // Recheck after the confirmation modal closes.
+  if (isStartingShift || isEndingShift) return;
+
+  if (currentShift && currentShift.active) {
+    console.warn('TUX POS: A shift is already active. Start Shift cancelled.');
     return;
-
   }
 
-  finalizeStartShift();
+  isStartingShift = true;
 
+  // Update this selector if your actual Start Shift button uses another ID.
+  const button = document.getElementById('start-shift-btn');
+
+  if (button) {
+    button.disabled = true;
+    button.dataset.originalText = button.textContent;
+    button.textContent = 'Starting Shift...';
+  }
+
+  try {
+    await finalizeStartShift();
+  } catch (error) {
+    console.error('TUX POS: Failed to start shift:', error);
+  } finally {
+    isStartingShift = false;
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = button.dataset.originalText || 'Start Shift';
+      delete button.dataset.originalText;
+    }
+  }
 }
+
 
 
 /* =========================================================
@@ -253,62 +336,42 @@ function startShift() {
    ========================================================= */
 
 async function finalizeStartShift() {
-
   try {
-
-    const createdShift =
-      await createShiftInSupabase();
+    const createdShift = await createShiftInSupabase();
 
     if (!createdShift) {
       return;
     }
 
     currentOrder = [];
-
     kitchenOrders = [];
-
     completedSales = [];
-
     expensesList = [];
-
     orderCounter = 1;
 
-    localStorage.setItem(
-      'tuxOrderCounter',
-      '1'
-    );
+    localStorage.setItem('tuxOrderCounter', '1');
 
     updateOrderUI();
-
     renderKitchenBoard();
-
     renderExpensesTable();
-
     renderGamiyaView();
+    updateShiftUI();
 
     await refreshShiftReports();
 
     updateShiftUI();
 
-    alert(
-      'Shift started successfully. Opening balances were updated from current stock. Order numbering restarted from Order #1.'
-    );
+    // No success alert.
+    // The shift starts normally without an additional browser popup.
 
   } catch (error) {
-
-    console.error(
-      'TUX POS: Failed to start shift:',
-      error
-    );
+    console.error('TUX POS: Failed to start shift:', error);
 
     alert(
       'Could not start the shift. Please check the connection and try again.'
     );
-
   }
-
 }
-
 
 /* =========================================================
    BLOCK END SHIFT IF PREPARING
@@ -363,305 +426,190 @@ function blockEndShiftIfPreparing() {
    END SHIFT
    ========================================================= */
 
-function endShift() {
 
-  if (
-    getActiveRole() ===
-    'admin'
-  ) {
+async function endShift() {
+  // Prevent duplicate clicks while the shift is ending.
+  if (isEndingShift) return;
 
-    alert(
-      'Admin is in Spectate Mode. You cannot end a shift.'
-    );
-
-    return;
-
-  }
-
-  if (
-    !currentShift ||
-    !currentShift.active
-  ) {
-
-    alert(
-      'There is no active shift.'
-    );
-
-    return;
-
-  }
-
-  if (
-    blockEndShiftIfPreparing()
-  ) {
-
-    return;
-
-  }
-
+  if (getActiveRole() === 'admin') return;
+  if (!currentShift || !currentShift.active) return;
+  if (blockEndShiftIfPreparing()) return;
 
   const endMsg =
-    '■ END SHIFT\n\n' +
-    'Are you sure you want to end the shift?\n' +
-    'Current stock will automatically become the opening balance for the next shift. Ending the shift will not log workers or administrators out.';
+    'Are you sure you want to end the shift?\n\n' +
+    'Current stock will automatically become the opening balance for the next shift.\n\n' +
+    'Ending the shift will not log workers or administrators out.';
 
-  if (
-    !confirm(endMsg)
-  ) {
+  const confirmed = await openShiftConfirmModal({
+    title: '■ End Shift',
+    message: endMsg,
+    confirmText: 'End Shift',
+    confirmColor: '#e74c3c'
+  });
 
-    return;
+  if (!confirmed) return;
 
+  // Recheck after awaiting the confirmation modal.
+  if (isEndingShift || !currentShift || !currentShift.active) return;
+
+  isEndingShift = true;
+
+  const button = document.getElementById('end-shift-btn');
+  if (button) {
+    button.disabled = true;
+    button.dataset.originalText = button.textContent;
+    button.textContent = 'Ending Shift...';
   }
 
-  finalizeEndShift();
+  try {
+    await finalizeEndShift();
+  } catch (error) {
+    console.error('TUX POS: Failed to end shift:', error);
+  } finally {
+    isEndingShift = false;
 
+    if (button) {
+      button.disabled = false;
+      button.textContent = button.dataset.originalText || 'End Shift';
+      delete button.dataset.originalText;
+    }
+  }
 }
+
 
 
 /* =========================================================
    END SHIFT — SUPABASE
    ========================================================= */
 
+
 async function finalizeEndShift() {
-
-  if (
-    blockEndShiftIfPreparing()
-  ) {
-
+  if (blockEndShiftIfPreparing()) {
     return;
-
   }
 
+  // Capture the active shift before asynchronous operations.
+  const endingShift = currentShift;
+
+  if (!endingShift || !endingShift.supabaseId) {
+    console.error(
+      'TUX POS: Cannot finalize shift because the active shift or its Supabase ID is missing.',
+      { currentShift }
+    );
+
+    alert(
+      'Cannot end the shift because the active shift could not be identified.\n\n' +
+      'Please refresh the page and check the active shift before trying again.'
+    );
+
+    return;
+  }
+
+  const endingShiftId = endingShift.supabaseId;
+
   try {
-
-    /* =====================================================
-       LOAD CURRENT REPORT DATA
-       ===================================================== */
-
-    if (
-      typeof loadReportsFromSupabase ===
-      'function'
-    ) {
-
-      await loadReportsFromSupabase();
-
-    }
-
-
-    /* =====================================================
-       LOAD MONTHLY FINANCE
-       ===================================================== */
-
+    // Load monthly finance without reloading reports first.
     await loadMonthlyFinanceFromSupabase();
 
-
-    /* =====================================================
-       COMPLETE SHIFT IN SUPABASE
-       ===================================================== */
-
-    const completed =
-      await completeShiftInSupabase();
+    // Complete the shift in Supabase.
+    const completed = await completeShiftInSupabase();
 
     if (!completed) {
-
       return;
-
     }
 
-
-    /* =====================================================
-       MONTHLY FINANCE
-       ===================================================== */
-
+    // Update monthly finance.
     ensureMonthlyFinance();
 
-    const snapshot =
-      buildShiftSnapshot();
+    const snapshot = buildShiftSnapshot();
 
-    monthlyFinance.bank +=
-      Number(
-        snapshot.totalSales || 0
-      );
-
-    monthlyFinance.overallExpenses +=
-      Number(
-        snapshot.totalExpenses || 0
-      );
-
-    monthlyFinance.overallOrders +=
-      Number(
-        snapshot.totalOrders || 0
-      );
+    monthlyFinance.bank += Number(snapshot.totalSales || 0);
+    monthlyFinance.overallExpenses += Number(snapshot.totalExpenses || 0);
+    monthlyFinance.overallOrders += Number(snapshot.totalOrders || 0);
 
     monthlyFinance.hurryApp =
-      Number(
-        monthlyFinance.hurryApp || 0
-      ) +
-      Number(
-        snapshot.dailyHurryApp || 0
-      );
+      Number(monthlyFinance.hurryApp || 0) +
+      Number(snapshot.dailyHurryApp || 0);
 
-
-    /* =====================================================
-       SAVE MONTHLY FINANCE
-       ===================================================== */
-
-    const financeSaved =
-      await saveMonthlyFinanceToSupabase();
+    // Save monthly finance.
+    const financeSaved = await saveMonthlyFinanceToSupabase();
 
     if (!financeSaved) {
-
       alert(
         'The shift was completed, but monthly finance could not be saved. Please check Supabase before continuing.'
       );
-
       return;
-
     }
 
-
-    /* =====================================================
-       ADMIN REPORTS
-       ===================================================== */
-
-    if (
-      typeof updateAdminReportsAtEndShift ===
-      'function'
-    ) {
-
+    // Update Admin Reports.
+    if (typeof updateAdminReportsAtEndShift === 'function') {
       const adminReportsSaved =
         await updateAdminReportsAtEndShift();
 
       if (!adminReportsSaved) {
-
         alert(
           'The shift was completed, but Admin Reports could not be saved. Please check Supabase.'
         );
-
         return;
-
       }
 
       if (
         snapshot.adminReports &&
-        typeof adminReportFinance ===
-        'object'
+        typeof adminReportFinance === 'object'
       ) {
+        snapshot.adminReports.bank = Number(
+          adminReportFinance.bank || 0
+        );
 
-        snapshot.adminReports.bank =
-          Number(
-            adminReportFinance.bank || 0
-          );
-
-        snapshot.adminReports.profit =
-          Number(
-            adminReportFinance.profit || 0
-          );
-
+        snapshot.adminReports.profit = Number(
+          adminReportFinance.profit || 0
+        );
       }
-
     }
 
+    // Add monthly finance values to the snapshot.
+    snapshot.bank = monthlyFinance.bank;
+    snapshot.overallExpenses = monthlyFinance.overallExpenses;
+    snapshot.overallOrders = monthlyFinance.overallOrders;
+    snapshot.hurryApp = monthlyFinance.hurryApp;
+    snapshot.supabaseId = endingShiftId;
 
-    /* =====================================================
-       ADD MONTHLY FINANCE VALUES TO SNAPSHOT
-       ===================================================== */
-
-    snapshot.bank =
-      monthlyFinance.bank;
-
-    snapshot.overallExpenses =
-      monthlyFinance.overallExpenses;
-
-    snapshot.overallOrders =
-      monthlyFinance.overallOrders;
-
-    snapshot.hurryApp =
-      monthlyFinance.hurryApp;
-
-    snapshot.supabaseId =
-      currentShift.supabaseId;
-
-
-    /* =====================================================
-       SAVE SHIFT HISTORY
-       ===================================================== */
-
-    shiftHistory.unshift(
-      snapshot
-    );
+    // Save shift history locally.
+    shiftHistory.unshift(snapshot);
 
     localStorage.setItem(
       'tuxShiftHistory',
-      JSON.stringify(
-        shiftHistory
-      )
+      JSON.stringify(shiftHistory)
     );
 
-
-    /* =====================================================
-       RESET CURRENT SHIFT STATE
-       ===================================================== */
-
+    // Reset current shift state.
     currentShift = null;
-
     currentOrder = [];
-
     kitchenOrders = [];
-
     completedSales = [];
-
     expensesList = [];
-
     orderCounter = 1;
 
-    localStorage.setItem(
-      'tuxOrderCounter',
-      '1'
-    );
+    localStorage.setItem('tuxOrderCounter', '1');
 
-
-    /* =====================================================
-       REFRESH OTHER UI
-       ===================================================== */
-
+    // Update the interface immediately.
     updateOrderUI();
-
     renderKitchenBoard();
-
     renderExpensesTable();
-
     renderGamiyaView();
-
     renderShiftHistory();
-
     updateShiftUI();
 
+    // Refresh reports in the background.
+    refreshShiftReports().catch(error => {
+      console.error(
+        'TUX POS: Failed to refresh reports after ending shift:',
+        error
+      );
+    });
 
-    /* =====================================================
-       LOG EVERYONE OUT
-       ===================================================== */
-
-
-
-
-    /* =====================================================
-       REFRESH REPORTS IMMEDIATELY
-       ===================================================== */
-
-    await refreshShiftReports();
-
-
-    /* =====================================================
-       FINAL MESSAGE
-       ===================================================== */
-
-
-    alert(
-      'Shift ended successfully. Current stock was saved as the opening balance for the next shift, the shift was saved to Supabase, monthly finance and Admin Reports were updated, the Kitchen Board was reset, reports were refreshed, and all login sessions remain active. The next shift will start from Order #1.'
-    );
+    // Success alert intentionally removed.
   } catch (error) {
-
     console.error(
       'TUX POS: Failed to finalize shift:',
       error
@@ -670,8 +618,6 @@ async function finalizeEndShift() {
     alert(
       'An error occurred while ending the shift. Please check the browser console and Supabase before trying again.'
     );
-
   }
-
 }
 
