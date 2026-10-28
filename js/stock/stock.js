@@ -10,29 +10,22 @@
    ========================================================= */
 
 function canManageStock() {
+  const role = getActiveRole();
 
-  return (
-    getActiveRole() === 'tuxadmin'
-  );
-
+  return role === 'tuxadmin';
 }
 
 function requireStockManagementPermission() {
-
   if (!canManageStock()) {
-
     alert(
-      'View only - Only Tux Admin can edit the stock.'
+      'Permission denied. Only TUX Admin can manage stock settings.'
     );
 
     return false;
-
   }
 
   return true;
-
 }
-
 
 /* =========================================================
    INVENTORY

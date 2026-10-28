@@ -116,6 +116,38 @@
     </div>
 
 
+
+<!-- DELIVERY & CANCELED ORDERS -->
+
+<div class="stats-grid" style="
+      grid-template-columns: repeat(3, 1fr);
+      margin-bottom: 5px;
+    ">
+
+  <div class="stat-card" style="border-color: #3498db;">
+    <h4>Delivery Today</h4>
+    <span id="repDailyDelivery" style="color: #3498db;">
+      0.00 LE
+    </span>
+  </div>
+
+  <div class="stat-card" style="border-color: #27ae60;">
+    <h4>Overall Delivery</h4>
+    <span id="repOverallDelivery" style="color: #2ecc71;">
+      0.00 LE
+    </span>
+  </div>
+
+  <div class="stat-card" style="border-color: #e74c3c;">
+    <h4>Canceled Orders</h4>
+    <span id="repCancelledOrders" style="color: #e74c3c;">
+      0
+    </span>
+  </div>
+
+</div>
+
+
     <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr); margin-bottom: 5px;">
 
       <div class="stat-card">
@@ -437,14 +469,23 @@
             align-items:center;
           ">
 
-        <button id="shiftHistoryResetBtn" class="btn-save" style="
-              display:none;
-              padding:4px 8px;
-              font-size:9px;
-              background:#c0392b;
-            " onclick="resetShiftHistory()">
-          ♻ Reset Shift History
-        </button>
+       <button
+  id="shiftHistoryResetBtn"
+  class="btn-save"
+  style="
+    display:none;
+    padding:4px 8px;
+    font-size:9px;
+    background:#c0392b;
+    color:#fff;
+    border:none;
+    border-radius:4px;
+    cursor:pointer;
+  "
+  onclick="resetShiftHistory()"
+>
+  🗑 Delete All Shift Reports
+</button>>
 
         <select id="shiftHistorySelect" onchange="showShiftHistory(this.value)" style="
               padding:4px;

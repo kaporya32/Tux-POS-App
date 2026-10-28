@@ -65,7 +65,28 @@ function requireTuxAdminForWorkerManagement() {
  * Tux Admin is always allowed.
  */
 
-function requireAttendanceWritePermission() {
+
+function requireAttendanceWritePermission(options = {}) {
+
+  /*
+   * Allow attendance closure during logout only.
+   * This does not grant Admin permission to make
+   * ordinary attendance changes.
+   */
+
+  if (
+    options.allowLogout === true
+  ) {
+
+    return true;
+
+  }
+
+
+  /*
+   * Admin remains in Spectate Mode.
+   * TUX Admin retains the existing permission.
+   */
 
   if (
     typeof adminActive !== 'undefined' &&
@@ -89,6 +110,345 @@ function requireAttendanceWritePermission() {
   return true;
 
 }
+
+
+
+
+/* =========================================================
+   TUX POS — ADMIN'S OWN ATTENDANCE
+   Separate from worker attendance permissions.
+   ========================================================= */
+
+
+async function createAdminAttendanceSession(adminId) {
+
+  /* =======================================================
+     VALIDATE ADMIN ID
+     Do not require adminActive to be true here.
+     staffLogin() starts attendance BEFORE activating Admin.
+     TUX Admin and Admin must be allowed to work simultaneously.
+     ======================================================= */
+
+  if (!adminId) {
+    alert(
+      'Admin attendance could not start: Admin ID is missing.'
+    );
+
+    return false;
+  }
+
+  try {
+
+    /* =====================================================
+       CHECK FOR AN EXISTING OPEN ATTENDANCE SESSION
+       ===================================================== */
+
+    const {
+      data: existing,
+      error: findError
+    } = await supabaseClient
+      .from('attendance')
+      .select('id')
+      .eq('worker_id', adminId)
+      .eq('status', 'working')
+      .is('check_out', null)
+      .limit(1);
+
+    if (findError) {
+      throw findError;
+    }
+
+
+    /* =====================================================
+       REUSE EXISTING OPEN SESSION
+       ===================================================== */
+
+    if (existing && existing.length > 0) {
+
+      if (typeof loadAllAttendance === 'function') {
+        await loadAllAttendance();
+      }
+
+      if (typeof renderWorkersView === 'function') {
+        renderWorkersView();
+      }
+
+      if (typeof renderTodayWorkers === 'function') {
+        renderTodayWorkers();
+      }
+
+      window.dispatchEvent(
+        new CustomEvent('tux-attendance-updated')
+      );
+
+      console.log(
+        'TUX POS — Existing Admin attendance session found:',
+        adminId
+      );
+
+      return true;
+    }
+
+
+    /* =====================================================
+       CREATE ADMIN ATTENDANCE RECORD
+       ===================================================== */
+
+    const {
+      data,
+      error
+    } = await supabaseClient
+      .from('attendance')
+      .insert({
+        worker_id: adminId,
+        date: getTodayKey(),
+        check_in: new Date().toISOString(),
+        status: 'working'
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      throw new Error(
+        'Supabase did not return the Admin attendance record.'
+      );
+    }
+
+
+    /* =====================================================
+       REFRESH ATTENDANCE DATA AND UI
+       ===================================================== */
+
+    if (typeof loadAllAttendance === 'function') {
+      await loadAllAttendance();
+    }
+
+    if (typeof renderWorkersView === 'function') {
+      renderWorkersView();
+    }
+
+    if (typeof renderSelectedWorker === 'function') {
+      renderSelectedWorker();
+    }
+
+    if (typeof renderTodayWorkers === 'function') {
+      renderTodayWorkers();
+    }
+
+    window.dispatchEvent(
+      new CustomEvent('tux-attendance-updated')
+    );
+
+
+    /* =====================================================
+       SUCCESS
+       ===================================================== */
+
+    console.log(
+      'TUX POS — Admin attendance check-in successful:',
+      data
+    );
+
+    return true;
+
+  } catch (error) {
+
+    console.error(
+      'Admin attendance check-in failed:',
+      error
+    );
+
+    alert(
+      'Admin check-in failed. Please check the connection and try again.'
+    );
+
+    return false;
+  }
+}
+
+
+
+
+
+async function endAdminAttendanceSession(adminId) {
+  console.log('TUX POS — Starting Admin attendance checkout.', {
+    adminId,
+    adminActive:
+      typeof adminActive !== 'undefined' ? adminActive : 'undefined',
+    tuxAdminActive:
+      typeof tuxAdminActive !== 'undefined' ? tuxAdminActive : 'undefined'
+  });
+
+  if (
+    typeof adminActive === 'undefined' ||
+    adminActive !== true ||
+    (
+      typeof tuxAdminActive !== 'undefined' &&
+      tuxAdminActive === true
+    )
+  ) {
+    console.warn(
+      'TUX POS — Admin attendance checkout skipped by role guard.'
+    );
+
+    return true;
+  }
+
+  if (!adminId) {
+    console.error('TUX POS — Admin ID is missing during checkout.');
+    alert('Admin attendance could not close: Admin ID is missing.');
+    return false;
+  }
+
+  try {
+    const {
+      data: session,
+      error: findError
+    } = await supabaseClient
+      .from('attendance')
+      .select('id, worker_id, check_in, check_out, status')
+      .eq('worker_id', adminId)
+      .eq('status', 'working')
+      .is('check_out', null)
+      .order('check_in', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (findError) {
+      console.error(
+        'TUX POS — Failed to find Admin attendance:',
+        findError
+      );
+
+      alert(
+        'Could not find Admin attendance.\n\n' +
+        (findError.message || JSON.stringify(findError))
+      );
+
+      return false;
+    }
+
+    if (!session) {
+      console.warn(
+        'TUX POS — No open Admin attendance record found.',
+        { adminId }
+      );
+
+      alert(
+        'No open Admin attendance record was found.\n\n' +
+        'Admin ID: ' + adminId + '\n\n' +
+        'The Admin will remain logged in so attendance is not silently skipped.'
+      );
+
+      return false;
+    }
+
+    const checkOut = new Date();
+    const checkIn = new Date(session.check_in);
+
+    const hours = Math.max(
+      0,
+      (checkOut.getTime() - checkIn.getTime()) / 3600000
+    );
+
+    const {
+      data: updatedSession,
+      error: updateError
+    } = await supabaseClient
+      .from('attendance')
+      .update({
+        check_out: checkOut.toISOString(),
+        hours: Number(hours.toFixed(2)),
+        status: 'completed'
+      })
+      .eq('id', session.id)
+      .eq('worker_id', adminId)
+      .is('check_out', null)
+      .select()
+      .maybeSingle();
+
+    if (updateError) {
+      console.error(
+        'TUX POS — Failed to update Admin attendance:',
+        updateError
+      );
+
+      alert(
+        'Could not close Admin attendance.\n\n' +
+        (updateError.message || JSON.stringify(updateError))
+      );
+
+      return false;
+    }
+
+    if (!updatedSession) {
+      console.error(
+        'TUX POS — Attendance update returned no record.',
+        { sessionId: session.id, adminId }
+      );
+
+      alert(
+        'The attendance record was found, but Supabase did not confirm the update.\n\n' +
+        'Attendance ID: ' + session.id
+      );
+
+      return false;
+    }
+
+    console.log(
+      'TUX POS — Admin attendance checkout successful:',
+      updatedSession
+    );
+
+    if (typeof loadAllAttendance === 'function') {
+      await loadAllAttendance();
+    }
+
+    if (typeof renderWorkersView === 'function') {
+      renderWorkersView();
+    }
+
+    if (typeof renderSelectedWorker === 'function') {
+      renderSelectedWorker();
+    }
+
+    if (typeof renderTodayWorkers === 'function') {
+      renderTodayWorkers();
+    }
+
+    window.dispatchEvent(
+      new CustomEvent('tux-attendance-updated')
+    );
+
+    return true;
+
+  } catch (error) {
+    console.error(
+      'TUX POS — Unexpected Admin attendance checkout error:',
+      error
+    );
+
+    alert(
+      'Unexpected Admin attendance checkout error.\n\n' +
+      (error.message || String(error))
+    );
+
+    return false;
+  }
+}
+
+
+
+
+
+
+
+
+
 
 
 /* =========================================================
@@ -715,75 +1075,49 @@ async function updateWorkerPasswordInSupabase(
    DELETE / DEACTIVATE WORKER
    ========================================================= */
 
-async function deleteWorkerFromSupabase(
-  workerId
-) {
+async function deleteWorkerFromSupabase(workerId) {
 
-  if (
-    !requireTuxAdminForWorkerManagement()
-  ) {
-
+  if (!requireTuxAdminForWorkerManagement()) {
     throw new Error(
-      'Only Tux Admin can deactivate workers.'
+      'Only Tux Admin can deactivate accounts.'
     );
-
   }
 
+  if (!workerId) {
+    throw new Error('Account ID is required.');
+  }
 
-  const { error } =
-    await supabaseClient
+  const account = workersList.find(function (item) {
+    return String(item.id) === String(workerId);
+  });
 
-      .from('workers')
+  if (!account) {
+    throw new Error('Account not found.');
+  }
 
-      .update({
-
-        active:
-          false
-
-      })
-
-      .eq(
-        'id',
-        workerId
-      );
-
+  const { error } = await supabaseClient
+    .from('workers')
+    .update({
+      active: false
+    })
+    .eq('id', workerId);
 
   if (error) {
-
-    console.error(
-      'Failed to deactivate worker:',
-      error
-    );
-
+    console.error('Failed to deactivate account:', error);
     throw error;
-
   }
 
+  // Remove the account from the in-memory list.
+  workersList = workersList.filter(function (item) {
+    return String(item.id) !== String(workerId);
+  });
 
-  workersList =
-    workersList.filter(
-      function (worker) {
-
-        return (
-          String(worker.id) !==
-          String(workerId)
-        );
-
-      }
-    );
-
-
-  activeStaffIds =
-    activeStaffIds.filter(
-      function (id) {
-
-        return (
-          String(id) !==
-          String(workerId)
-        );
-
-      }
-    );
+  // Only Workers participate in worker sessions and attendance.
+  if (account.role === 'worker') {
+    activeStaffIds = activeStaffIds.filter(function (id) {
+      return String(id) !== String(workerId);
+    });
+  }
 
 }
 
@@ -980,48 +1314,99 @@ async function loadAllAttendance() {
    CREATE ATTENDANCE SESSION
    ========================================================= */
 
+
 async function createAttendanceSession(
-  workerId
+  workerId,
+  options = {}
 ) {
 
-  if (
-    !requireAttendanceWritePermission()
-  ) {
+  /* =======================================================
+     VALIDATE WORKER ID
+     ======================================================= */
+
+  if (!workerId) {
 
     throw new Error(
-      'Admin cannot create attendance sessions.'
+      'Worker ID is required.'
     );
 
   }
 
 
+
+/* =======================================================
+   PERMISSION CHECK
+   ======================================================= */
+
+const isWorkerLogin =
+  options.allowWorkerLogin === true;
+
+
+console.log(
+  'TUX POS — Attendance permission diagnostic:',
+  {
+    workerId: workerId,
+    isWorkerLogin: isWorkerLogin,
+    adminActive:
+      typeof adminActive !== 'undefined'
+        ? adminActive
+        : 'undefined',
+    tuxAdminActive:
+      typeof tuxAdminActive !== 'undefined'
+        ? tuxAdminActive
+        : 'undefined'
+  }
+);
+
+
+if (
+  !isWorkerLogin &&
+  typeof requireAttendanceWritePermission === 'function' &&
+  !requireAttendanceWritePermission()
+) {
+
+  throw new Error(
+    'You do not have permission to create attendance sessions.'
+  );
+
+}
+
+
+
+  /* =======================================================
+     PREPARE CHECK-IN DATA
+     ======================================================= */
+
   const now =
     new Date();
 
 
-  const { data, error } =
-    await supabaseClient
+  /* =======================================================
+     CREATE ATTENDANCE SESSION IN SUPABASE
+     ======================================================= */
 
-      .from('attendance')
+  const {
+    data,
+    error
+  } = await supabaseClient
+    .from('attendance')
+    .insert({
 
-      .insert({
+      worker_id:
+        workerId,
 
-        worker_id:
-          workerId,
+      date:
+        getTodayKey(),
 
-        date:
-          getTodayKey(),
+      check_in:
+        now.toISOString(),
 
-        check_in:
-          now.toISOString(),
+      status:
+        'working'
 
-        status:
-          'working'
-
-      })
-
-      .select()
-      .single();
+    })
+    .select()
+    .single();
 
 
   if (error) {
@@ -1036,13 +1421,33 @@ async function createAttendanceSession(
   }
 
 
-  const worker =
-    getWorkerById(
-      workerId
+  if (!data) {
+
+    throw new Error(
+      'Supabase did not return the created attendance session.'
     );
+
+  }
+
+
+  /* =======================================================
+     UPDATE LOCAL WORKER ATTENDANCE
+     ======================================================= */
+
+  const worker =
+    typeof getWorkerById === 'function'
+      ? getWorkerById(workerId)
+      : null;
 
 
   if (worker) {
+
+    if (!Array.isArray(worker.attendance)) {
+
+      worker.attendance = [];
+
+    }
+
 
     const alreadyExists =
       worker.attendance.some(
@@ -1089,29 +1494,39 @@ async function createAttendanceSession(
   }
 
 
-  /*
-   * Keep local browser state synchronized immediately.
-   */
+  /* =======================================================
+     SYNCHRONIZE ACTIVE STAFF
+     ======================================================= */
 
-  if (
-    !activeStaffIds.some(
-      function (id) {
+  if (Array.isArray(activeStaffIds)) {
 
-        return (
-          String(id) ===
-          String(workerId)
-        );
+    const alreadyActive =
+      activeStaffIds.some(
+        function (id) {
 
-      }
-    )
-  ) {
+          return (
+            String(id) ===
+            String(workerId)
+          );
 
-    activeStaffIds.push(
-      String(workerId)
-    );
+        }
+      );
+
+
+    if (!alreadyActive) {
+
+      activeStaffIds.push(
+        String(workerId)
+      );
+
+    }
 
   }
 
+
+  /* =======================================================
+     LOG SUCCESS
+     ======================================================= */
 
   console.log(
     'TUX POS — Attendance session created:',
@@ -1124,25 +1539,23 @@ async function createAttendanceSession(
 }
 
 
+
+
 /* =========================================================
    CLOSE ATTENDANCE SESSION
    ========================================================= */
 
+
+
 async function closeAttendanceSession(
   attendanceId,
-  hours
+  hours,
+  options = {}
 ) {
 
-  if (
-    !requireAttendanceWritePermission()
-  ) {
-
-    throw new Error(
-      'Admin cannot close attendance sessions.'
-    );
-
-  }
-
+  /* =======================================================
+     VALIDATE ATTENDANCE ID
+     ======================================================= */
 
   if (!attendanceId) {
 
@@ -1153,56 +1566,67 @@ async function closeAttendanceSession(
   }
 
 
+  /* =======================================================
+     PERMISSION CHECK
+     ======================================================= */
+
+  const isLogout =
+    options.allowLogout === true;
+
+
+  if (
+    typeof requireAttendanceWritePermission === 'function' &&
+    !requireAttendanceWritePermission({
+      allowLogout: isLogout
+    })
+  ) {
+
+    throw new Error(
+      'You do not have permission to close this attendance session.'
+    );
+
+  }
+
+
+  /* =======================================================
+     PREPARE CHECK-OUT DATA
+     ======================================================= */
+
   const checkOut =
     new Date().toISOString();
 
-
   const finalHours =
-    Number(
-      hours || 0
-    );
+    Number(hours || 0);
 
 
   console.log(
     'TUX POS — Closing attendance session:',
     {
-      attendanceId:
-        attendanceId,
-
-      hours:
-        finalHours,
-
-      checkOut:
-        checkOut
+      attendanceId: attendanceId,
+      hours: finalHours,
+      checkOut: checkOut,
+      logout: isLogout
     }
   );
 
 
-  const { data, error } =
-    await supabaseClient
+  /* =======================================================
+     UPDATE SUPABASE
+     ======================================================= */
 
-      .from('attendance')
-
-      .update({
-
-        check_out:
-          checkOut,
-
-        hours:
-          finalHours,
-
-        status:
-          'completed'
-
-      })
-
-      .eq(
-        'id',
-        attendanceId
-      )
-
-      .select('*')
-      .single();
+  const {
+    data,
+    error
+  } = await supabaseClient
+    .from('attendance')
+    .update({
+      check_out: checkOut,
+      hours: finalHours,
+      status: 'completed'
+    })
+    .eq('id', attendanceId)
+    .select('*')
+    .single();
 
 
   if (error) {
@@ -1232,83 +1656,97 @@ async function closeAttendanceSession(
   );
 
 
-  workersList.forEach(
-    function (worker) {
+  /* =======================================================
+     UPDATE LOCAL WORKER ATTENDANCE RECORDS
+     ======================================================= */
 
-      if (!worker.attendance) {
+  if (Array.isArray(workersList)) {
 
-        return;
-
-      }
-
-
-      worker.attendance.forEach(
-        function (record) {
-
-          if (
-            String(record.id) !==
-            String(attendanceId)
-          ) {
-
-            return;
-
-          }
-
-
-          record.checkOut =
-            data.check_out || '';
-
-
-          record.hours =
-            Number(
-              data.hours || 0
-            );
-
-
-          record.status =
-            data.status === 'completed'
-              ? 'completed'
-              : data.status;
-
-        }
-      );
-
-    }
-  );
-
-
-  /*
-   * Find the worker associated with the closed session.
-   */
-
-  const closedWorker =
-    workersList.find(
+    workersList.forEach(
       function (worker) {
 
-        return (
-          Array.isArray(worker.attendance) &&
-          worker.attendance.some(
-            function (record) {
+        if (
+          !worker ||
+          !Array.isArray(worker.attendance)
+        ) {
 
-              return (
-                String(record.id) ===
-                String(attendanceId)
-              );
+          return;
+
+        }
+
+
+        worker.attendance.forEach(
+          function (record) {
+
+            if (
+              String(record.id) !==
+              String(attendanceId)
+            ) {
+
+              return;
 
             }
-          )
+
+
+            record.checkOut =
+              data.check_out || '';
+
+
+            record.hours =
+              Number(data.hours || 0);
+
+
+            record.status =
+              data.status === 'completed'
+                ? 'completed'
+                : data.status;
+
+          }
         );
 
       }
     );
 
+  }
+
+
+  /* =======================================================
+     FIND WORKER ASSOCIATED WITH THIS SESSION
+     ======================================================= */
+
+  const closedWorker =
+    Array.isArray(workersList)
+      ? workersList.find(
+          function (worker) {
+
+            return (
+              worker &&
+              Array.isArray(worker.attendance) &&
+              worker.attendance.some(
+                function (record) {
+
+                  return (
+                    String(record.id) ===
+                    String(attendanceId)
+                  );
+
+                }
+              )
+            );
+
+          }
+        )
+      : null;
+
+
+  /* =======================================================
+     REMOVE WORKER FROM ACTIVE LIST WHEN FULLY CHECKED OUT
+     ======================================================= */
 
   if (closedWorker) {
 
     const stillWorking =
-      Array.isArray(
-        closedWorker.attendance
-      ) &&
+      Array.isArray(closedWorker.attendance) &&
       closedWorker.attendance.some(
         function (record) {
 
@@ -1322,7 +1760,10 @@ async function closeAttendanceSession(
       );
 
 
-    if (!stillWorking) {
+    if (
+      !stillWorking &&
+      Array.isArray(activeStaffIds)
+    ) {
 
       activeStaffIds =
         activeStaffIds.filter(
@@ -1341,62 +1782,111 @@ async function closeAttendanceSession(
   }
 
 
+  /* =======================================================
+     RETURN UPDATED ATTENDANCE RECORD
+     ======================================================= */
+
   return data;
 
 }
 
+
+
+
+
 async function endAttendanceSession(workerId) {
 
-  const worker = Array.isArray(workersList)
-    ? workersList.find(
-        item => String(item.id) === String(workerId)
-      )
-    : null;
+  /* =======================================================
+     FIND WORKER
+     ======================================================= */
+
+  const worker =
+    Array.isArray(workersList)
+      ? workersList.find(
+          item =>
+            String(item.id) === String(workerId)
+        )
+      : null;
+
 
   if (!worker) {
-    throw new Error('Worker not found.');
+
+    throw new Error(
+      'Worker not found.'
+    );
+
   }
 
-  const attendance = Array.isArray(worker.attendance)
-    ? worker.attendance
-    : [];
 
-  const activeRecord = attendance
-    .filter(
-      record =>
-        record.checkIn &&
-        !record.checkOut &&
-        record.status === 'working'
-    )
-    .sort(
-      (a, b) =>
-        new Date(b.checkIn).getTime() -
-        new Date(a.checkIn).getTime()
-    )[0];
+  /* =======================================================
+     FIND ACTIVE ATTENDANCE SESSION
+     ======================================================= */
+
+  const attendance =
+    Array.isArray(worker.attendance)
+      ? worker.attendance
+      : [];
+
+
+  const activeRecord =
+    attendance
+      .filter(
+        record =>
+          record.checkIn &&
+          !record.checkOut &&
+          record.status === 'working'
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.checkIn).getTime() -
+          new Date(a.checkIn).getTime()
+      )[0];
+
 
   if (!activeRecord) {
+
     throw new Error(
       'No active attendance session found for this worker.'
     );
+
   }
 
-  const checkOut = new Date().toISOString();
 
-  const hours = Math.max(
-    0,
-    Number(
-      calculateWorkedHours(
-        activeRecord.checkIn,
-        checkOut
-      )
-    ) || 0
-  );
+  /* =======================================================
+     CALCULATE CHECK-OUT HOURS
+     ======================================================= */
+
+  const checkOut =
+    new Date().toISOString();
+
+
+  const hours =
+    Math.max(
+      0,
+      Number(
+        calculateWorkedHours(
+          activeRecord.checkIn,
+          checkOut
+        )
+      ) || 0
+    );
+
+
+  /* =======================================================
+     CLOSE ATTENDANCE SESSION DURING LOGOUT
+     ======================================================= */
 
   return await closeAttendanceSession(
     activeRecord.id,
-    hours
+    hours,
+    {
+      allowLogout: true
+    }
   );
+
 }
+
+
 
 /* =========================================================
    CLOSE ALL OPEN SESSIONS
@@ -1605,76 +2095,48 @@ async function addWorkerToSupabase(
   role = 'worker'
 ) {
 
-  if (
-    !requireTuxAdminForWorkerManagement()
-  ) {
-
+  if (!requireTuxAdminForWorkerManagement()) {
     throw new Error(
-      'Only Tux Admin can add workers.'
+      'Only Tux Admin can manage accounts.'
     );
-
   }
 
+  name = String(name || '').trim();
+  password = String(password || '').trim();
 
-  name =
-    String(
-      name || ''
-    ).trim();
-
-
-  password =
-    String(
-      password || ''
-    ).trim();
-
-
-  if (
-    !name ||
-    !password
-  ) {
-
+  if (!name || !password) {
     throw new Error(
-      'Worker name and password are required.'
+      'Account name and password are required.'
     );
-
   }
 
-
-  const existing =
-    workersList.find(
-      function (worker) {
-
-        return (
-          worker.name.toLowerCase() ===
-          name.toLowerCase()
-        );
-
-      }
+  if (!['worker', 'admin'].includes(role)) {
+    throw new Error(
+      'Invalid account role.'
     );
+  }
 
+  const existing = workersList.find(function (account) {
+    return (
+      account.active !== false &&
+      String(account.name).trim().toLowerCase() ===
+        name.toLowerCase()
+    );
+  });
 
   if (existing) {
-
     throw new Error(
-      'A worker with this name already exists.'
+      'An account with this name already exists.'
     );
-
   }
 
-
   return await createWorkerInSupabase(
-
     name,
-
     password,
-
     role
-
   );
 
 }
-
-
 /* =========================================================
    CHANGE WORKER PASSWORD
    ========================================================= */

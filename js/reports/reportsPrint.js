@@ -147,6 +147,8 @@ function buildShiftSnapshot() {
   let totalDisc = 0;
   let totalSales = 0;
   let totalExpenses = 0;
+  let deliveryToday = 0;
+  let cancelledOrders = 0;
 
   let snapshotSales = [];
   let snapshotExpenses = [];
@@ -157,8 +159,15 @@ function buildShiftSnapshot() {
     snapshotSales = getReportSalesForCurrentShift();
   }
 
+  if (!Array.isArray(snapshotSales)) {
+    snapshotSales = [];
+  }
+
   if (snapshotSales.length === 0) {
-    snapshotSales = completedSales;
+    snapshotSales =
+      Array.isArray(completedSales)
+        ? completedSales
+        : [];
   }
 
   if (
@@ -167,15 +176,41 @@ function buildShiftSnapshot() {
     snapshotExpenses = getReportExpensesForCurrentShift();
   }
 
-  if (snapshotExpenses.length === 0) {
-    snapshotExpenses = expensesList;
+  if (!Array.isArray(snapshotExpenses)) {
+    snapshotExpenses = [];
   }
 
-  const validSales = snapshotSales.filter(function (ord) {
-    return ord.status === 'done';
-  });
+  if (snapshotExpenses.length === 0) {
+    snapshotExpenses =
+      Array.isArray(expensesList)
+        ? expensesList
+        : [];
+  }
 
-  validSales.forEach(function (ord) {
+  /*
+  
+  * Include completed sales in financial totals.
+  * Count cancelled orders separately.
+    */
+  snapshotSales.forEach(function (ord) {
+    const status = String(ord.status || '').toLowerCase();
+
+
+    if (
+
+
+
+      status === 'cancelled' ||
+      status === 'canceled'
+    ) {
+      cancelledOrders++;
+      return;
+    }
+
+    if (status !== 'done') {
+      return;
+    }
+
     totalCash += Number(ord.cashPaid || 0);
     totalInsta += Number(ord.instaPaid || 0);
     totalVisa += Number(ord.visaPaid || 0);
@@ -184,6 +219,13 @@ function buildShiftSnapshot() {
     totalSales +=
       Number(ord.cashPaid || 0) +
       Number(ord.instaPaid || 0);
+
+    deliveryToday += Math.max(
+      0,
+      Number(ord.deliveryFee ?? ord.delivery_fee ?? 0)
+    );
+
+
   });
 
   snapshotExpenses.forEach(function (exp) {
@@ -192,11 +234,26 @@ function buildShiftSnapshot() {
 
   ensureMonthlyFinance();
 
+  /*
+  
+  * Resolve accumulated delivery from existing finance state.
+  * The correct property name must match your app's implementation.
+    */
+  let overallDelivery = 0;
 
-  /* =========================================================
-     ADMIN REPORT SNAPSHOT
-     ========================================================= */
+  if (typeof monthlyFinance !== 'undefined' && monthlyFinance) {
+    overallDelivery = Number(
+      monthlyFinance.overallDelivery ??
+      monthlyFinance.deliveryTotal ??
+      monthlyFinance.totalDelivery ??
+      0
+    );
+  }
 
+  /*
+  
+  * ADMIN REPORT SNAPSHOT
+    */
   let adminCash = 0;
   let adminInstaPay = 0;
   let adminDailyNetSales = 0;
@@ -206,17 +263,21 @@ function buildShiftSnapshot() {
   if (typeof ensureAdminReportFinance === 'function') {
     ensureAdminReportFinance();
 
+
     adminCash = Number(adminReportFinance.cash || 0);
     adminInstaPay = Number(adminReportFinance.instaPay || 0);
     adminDailyNetSales = Number(adminReportFinance.dailyNetSales || 0);
     adminBank = Number(adminReportFinance.bank || 0);
     adminProfit = Number(adminReportFinance.profit || 0);
+
+
   }
 
   const snapshot = {
     id: currentShift
       ? currentShift.id
       : 'S' + Date.now(),
+
 
     supabaseId: currentShift
       ? currentShift.supabaseId || null
@@ -245,8 +306,17 @@ function buildShiftSnapshot() {
     totalExpenses: totalExpenses,
     dailyExpenses: totalExpenses,
     netProfit: totalSales - totalExpenses,
-    totalOrders: validSales.length,
-    dailyOrders: validSales.length,
+    totalOrders: snapshotSales.filter(function (ord) {
+      return String(ord.status || '').toLowerCase() === 'done';
+    }).length,
+
+    dailyOrders: snapshotSales.filter(function (ord) {
+      return String(ord.status || '').toLowerCase() === 'done';
+    }).length,
+
+    deliveryToday: deliveryToday,
+    overallDelivery: overallDelivery,
+    cancelledOrders: cancelledOrders,
 
     bank: monthlyFinance.bank,
     overallExpenses: monthlyFinance.overallExpenses,
@@ -280,15 +350,20 @@ function buildShiftSnapshot() {
         })
       )
     )
+
+
   };
 
   snapshot.hawalkRequests = getHawalkRequestsForShift(snapshot);
 
   return snapshot;
 }
-/*   =========================================================    
-                       shift display number 
-  ========================================================= */
+
+
+
+/* =========================================================
+   SHIFT DISPLAY NUMBER
+   ========================================================= */
 
 function getShiftDisplayNumber(shiftId) {
   const sortedShifts = [...(shiftHistory || [])].sort(function (a, b) {
@@ -322,6 +397,11 @@ function getShiftDisplayNumber(shiftId) {
    ========================================================= */
 
 function printShiftReport(snapshot) {
+
+  /* =========================================================
+     SOURCE DATA
+     ========================================================= */
+
   const sales = Array.isArray(snapshot.sales)
     ? snapshot.sales
     : [];
@@ -330,61 +410,447 @@ function printShiftReport(snapshot) {
     ? snapshot.expenses
     : [];
 
+
+  /* =========================================================
+     HELPER FUNCTIONS
+     ========================================================= */
+
+  const escapeHtml = function (value) {
+
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+  };
+
+
+  const getDeliveryFee = function (order) {
+
+    return Math.max(
+      0,
+      Number(
+        order.deliveryFee ??
+        order.delivery_fee ??
+        0
+      ) || 0
+    );
+
+  };
+
+
+  const isCancelledOrder = function (order) {
+
+    const status = String(
+      order.status || ''
+    ).toLowerCase();
+
+    return (
+      status === 'cancelled' ||
+      status === 'canceled'
+    );
+
+  };
+
+
+  const isCompletedOrder = function (order) {
+
+    return (
+      String(order.status || '').toLowerCase() === 'done'
+    );
+
+  };
+
+
+  const formatMoney = function (value) {
+
+    return Number(value || 0).toFixed(2);
+
+  };
+
+
+  /* =========================================================
+     DELIVERY TODAY
+     Counts delivery fees for completed orders only.
+     ========================================================= */
+
+  const calculatedDeliveryToday = sales.reduce(
+    function (total, order) {
+
+      if (!isCompletedOrder(order)) {
+        return total;
+      }
+
+      return total + getDeliveryFee(order);
+
+    },
+    0
+  );
+
+
+  const deliveryToday = Number(
+    snapshot.deliveryToday ??
+    snapshot.dailyDelivery ??
+    calculatedDeliveryToday
+  ) || 0;
+
+
+  /* =========================================================
+     OVERALL DELIVERY
+     Use the saved overall value when available.
+     ========================================================= */
+
+  let overallDelivery = 0;
+
+  if (
+    snapshot.overallDelivery !== undefined &&
+    snapshot.overallDelivery !== null
+  ) {
+
+    overallDelivery = Number(
+      snapshot.overallDelivery
+    ) || 0;
+
+  } else if (
+    typeof monthlyFinance !== 'undefined' &&
+    monthlyFinance
+  ) {
+
+    overallDelivery = Number(
+      monthlyFinance.overallDelivery ??
+      monthlyFinance.deliveryTotal ??
+      monthlyFinance.totalDelivery ??
+      0
+    ) || 0;
+
+  }
+
+
+  /* =========================================================
+     CANCELLED ORDERS
+     ========================================================= */
+
+  const calculatedCancelledOrders = sales.filter(
+    function (order) {
+      return isCancelledOrder(order);
+    }
+  ).length;
+
+
+  const cancelledOrders = Number(
+    snapshot.cancelledOrders ??
+    calculatedCancelledOrders
+  ) || 0;
+
+
+  /* =========================================================
+     SALES TABLE ROWS
+     ========================================================= */
+
   const salesRows = sales.length
+
     ? [...sales]
+
       .sort(function (a, b) {
-        return Number(a.orderNum) - Number(b.orderNum);
+
+        return (
+          Number(a.orderNum || a.orderNumber || 0) -
+          Number(b.orderNum || b.orderNumber || 0)
+        );
+
       })
+
       .map(function (ord) {
-        const items = (ord.items || [])
+
+        const items = (
+          Array.isArray(ord.items)
+            ? ord.items
+            : []
+        )
+
           .map(function (item) {
-            return (
-              (item.name || 'Item') +
-              ' x' +
-              (item.qty || 0)
+
+            const itemName = escapeHtml(
+              item.name || 'Item'
             );
+
+            const quantity = Number(
+              item.qty ??
+              item.quantity ??
+              0
+            );
+
+            const extras = Array.isArray(item.extras)
+              ? item.extras
+              : [];
+
+            const extrasText = extras
+
+              .map(function (extra) {
+
+                if (typeof extra === 'string') {
+                  return escapeHtml(extra);
+                }
+
+                return escapeHtml(
+                  extra.name ||
+                  extra.itemName ||
+                  ''
+                );
+
+              })
+
+              .filter(Boolean)
+
+              .join(', ');
+
+            return `
+              <div>
+                ${itemName} × ${quantity}
+
+                ${extrasText
+                ? `<br><small>Extras: ${extrasText}</small>`
+                : ''
+              }
+              </div>
+            `;
+
           })
-          .join(', ');
+
+          .join('');
+
+
+        const orderNumber = escapeHtml(
+          ord.orderNum ??
+          ord.orderNumber ??
+          '-'
+        );
+
+
+        const orderTime = escapeHtml(
+          ord.time || '-'
+        );
+
+
+        const cashPaid = Number(
+          ord.cashPaid ??
+          ord.cash_paid ??
+          0
+        );
+
+
+        const instaPaid = Number(
+          ord.instaPaid ??
+          ord.insta_paid ??
+          0
+        );
+
+
+        const visaPaid = Number(
+          ord.visaPaid ??
+          ord.visa_paid ??
+          0
+        );
+
+
+        const discount = Number(
+          ord.discount || 0
+        );
+
+
+        const total = Number(
+          ord.total || 0
+        );
+
+
+        const deliveryFee = getDeliveryFee(ord);
+
+
+        const status = String(
+          ord.status || 'unknown'
+        ).toLowerCase();
+
+
+        let statusLabel = status;
+        let statusColor = '#555';
+
+        if (status === 'done') {
+
+          statusLabel = 'Completed';
+          statusColor = '#16803c';
+
+        } else if (isCancelledOrder(ord)) {
+
+          statusLabel = 'Cancelled';
+          statusColor = '#c0392b';
+
+        } else if (status === 'preparing') {
+
+          statusLabel = 'Preparing';
+          statusColor = '#b8860b';
+
+        }
+
+
+        const note = String(
+          ord.note || ''
+        ).trim();
+
+
+        const staffName = escapeHtml(
+          ord.staffName ||
+          ord.staff_name ||
+          '-'
+        );
+
 
         return `
-            <tr>
-              <td>#${ord.orderNum}</td>
-              <td>${ord.time || '-'}</td>
-              <td>${items}</td>
-              <td>${Number(ord.cashPaid || 0).toFixed(2)}</td>
-              <td>${Number(ord.instaPaid || 0).toFixed(2)}</td>
-              <td>${Number(ord.visaPaid || 0).toFixed(2)}</td>
-              <td>${Number(ord.discount || 0).toFixed(2)}</td>
-              <td>${Number(ord.total || 0).toFixed(2)}</td>
-            </tr>
-          `;
+          <tr>
+
+            <td>
+              #${orderNumber}
+            </td>
+
+            <td>
+              ${orderTime}
+            </td>
+
+            <td>
+              ${items || '-'}
+            </td>
+
+            <td>
+              ${staffName}
+            </td>
+
+            <td>
+              ${formatMoney(cashPaid)}
+            </td>
+
+            <td>
+              ${formatMoney(instaPaid)}
+            </td>
+
+            <td>
+              ${formatMoney(visaPaid)}
+            </td>
+
+            <td>
+              ${formatMoney(discount)}
+            </td>
+
+            <td>
+              ${formatMoney(deliveryFee)}
+            </td>
+
+            <td>
+              ${formatMoney(total)}
+            </td>
+
+            <td style="
+              color:${statusColor};
+              font-weight:bold;
+            ">
+              ${escapeHtml(statusLabel)}
+            </td>
+
+            <td style="
+              white-space:pre-wrap;
+              overflow-wrap:anywhere;
+            ">
+              ${escapeHtml(note || '-')}
+            </td>
+
+          </tr>
+        `;
+
       })
+
       .join('')
+
     : `
-        <tr>
-          <td colspan="8">No sales</td>
-        </tr>
-      `;
+      <tr>
+        <td colspan="12">
+          No orders found for this shift.
+        </td>
+      </tr>
+    `;
+
+
+  /* =========================================================
+     EXPENSE TABLE ROWS
+     ========================================================= */
 
   const expenseRows = expenses.length
+
     ? expenses
+
       .map(function (exp) {
+
+        const date = escapeHtml(
+          exp.date || '-'
+        );
+
+        const time = escapeHtml(
+          exp.time || ''
+        );
+
+        const name = escapeHtml(
+          exp.name || '-'
+        );
+
+        const quantity = escapeHtml(
+          exp.qty ?? exp.quantity ?? 0
+        );
+
+        const cost = Number(
+          exp.cost || 0
+        );
+
+        const notes = escapeHtml(
+          exp.notes || '-'
+        );
+
+
         return `
-            <tr>
-              <td>${exp.date || '-'} ${exp.time || ''}</td>
-              <td>${exp.name || '-'}</td>
-              <td>${exp.qty || 0}</td>
-              <td>${Number(exp.cost || 0).toFixed(2)}</td>
-              <td>${exp.notes || '-'}</td>
-            </tr>
-          `;
+          <tr>
+
+            <td>
+              ${date} ${time}
+            </td>
+
+            <td>
+              ${name}
+            </td>
+
+            <td>
+              ${quantity}
+            </td>
+
+            <td>
+              ${formatMoney(cost)}
+            </td>
+
+            <td>
+              ${notes}
+            </td>
+
+          </tr>
+        `;
+
       })
+
       .join('')
+
     : `
-        <tr>
-          <td colspan="5">No expenses</td>
-        </tr>
-      `;
+      <tr>
+        <td colspan="5">
+          No expenses recorded.
+        </td>
+      </tr>
+    `;
 
 
   /* =========================================================
@@ -392,30 +858,94 @@ function printShiftReport(snapshot) {
      ========================================================= */
 
   const adminReports = snapshot.adminReports || {
+
     cash: 0,
     instaPay: 0,
     dailyNetSales: 0,
     bank: 0,
     profit: 0
+
   };
 
-  const adminCash = Number(adminReports.cash || 0);
-  const adminInstaPay = Number(adminReports.instaPay || 0);
-  const adminDailyNetSales = Number(adminReports.dailyNetSales || 0);
-  const adminBank = Number(adminReports.bank || 0);
-  const adminProfit = Number(adminReports.profit || 0);
 
-  const hawalkRequests = Array.isArray(snapshot.hawalkRequests)
+  const adminCash = Number(
+    adminReports.cash || 0
+  );
+
+
+  const adminInstaPay = Number(
+    adminReports.instaPay || 0
+  );
+
+
+  const adminDailyNetSales = Number(
+    adminReports.dailyNetSales || 0
+  );
+
+
+  const adminBank = Number(
+    adminReports.bank || 0
+  );
+
+
+  const adminProfit = Number(
+    adminReports.profit || 0
+  );
+
+
+  /* =========================================================
+     HAWALK REQUESTS
+     ========================================================= */
+
+  const hawalkRequests = Array.isArray(
+    snapshot.hawalkRequests
+  )
+
     ? snapshot.hawalkRequests
-    : getHawalkRequestsForShift(snapshot);
 
+    : (
+      typeof getHawalkRequestsForShift === 'function'
+        ? getHawalkRequestsForShift(snapshot)
+        : []
+    );
+
+
+  /* =========================================================
+     SHIFT DISPLAY
+     ========================================================= */
+
+  const shiftDisplayNumber =
+    typeof getShiftDisplayNumber === 'function'
+
+      ? getShiftDisplayNumber(snapshot.id)
+
+      : String(snapshot.id || '-');
+
+
+  /* =========================================================
+     BUILD PRINT HTML
+     ========================================================= */
 
   const html = `
+
+    <!DOCTYPE html>
+
     <html>
+
     <head>
-   <title>TUX Shift Report ${getShiftDisplayNumber(snapshot.id)}</title>
+
+      <meta charset="UTF-8">
+
+      <title>
+        TUX Shift Report ${escapeHtml(shiftDisplayNumber)}
+      </title>
 
       <style>
+
+        * {
+          box-sizing: border-box;
+        }
+
         body {
           font-family: Arial, sans-serif;
           color: #000;
@@ -423,8 +953,15 @@ function printShiftReport(snapshot) {
           font-size: 12px;
         }
 
-        h1, h2 {
-          margin-bottom: 5px;
+        h1 {
+          margin-bottom: 8px;
+        }
+
+        h2 {
+          margin-top: 24px;
+          margin-bottom: 8px;
+          border-bottom: 1px solid #999;
+          padding-bottom: 5px;
         }
 
         table {
@@ -433,7 +970,8 @@ function printShiftReport(snapshot) {
           margin: 10px 0 20px;
         }
 
-        th, td {
+        th,
+        td {
           border: 1px solid #999;
           padding: 5px;
           text-align: left;
@@ -445,16 +983,21 @@ function printShiftReport(snapshot) {
           background: #eee;
         }
 
+        .shift-info {
+          margin: 5px 0;
+          line-height: 1.6;
+        }
+
         .summary {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 8px;
           margin: 15px 0;
         }
 
         .admin-summary {
           display: grid;
-          grid-template-columns: repeat(5, 1fr);
+          grid-template-columns: repeat(5, minmax(0, 1fr));
           gap: 8px;
           margin: 15px 0;
         }
@@ -462,16 +1005,44 @@ function printShiftReport(snapshot) {
         .box {
           border: 1px solid #999;
           padding: 8px;
+          overflow-wrap: anywhere;
         }
 
         .admin-box {
           border: 1px solid #3498db;
           padding: 8px;
+          overflow-wrap: anywhere;
+        }
+
+        .delivery-box {
+          border: 1px solid #d4a900;
+          padding: 8px;
+          background: #fffbea;
+          overflow-wrap: anywhere;
+        }
+
+        .cancelled-box {
+          border: 1px solid #c0392b;
+          padding: 8px;
+          background: #fff0f0;
+          overflow-wrap: anywhere;
+        }
+
+        .section-note {
+          font-size: 11px;
+          color: #444;
+          line-height: 1.5;
         }
 
         @media print {
+
           body {
             padding: 0;
+            font-size: 10px;
+          }
+
+          h2 {
+            page-break-after: avoid;
           }
 
           table {
@@ -482,75 +1053,107 @@ function printShiftReport(snapshot) {
             page-break-inside: avoid;
             page-break-after: auto;
           }
+
+          .summary,
+          .admin-summary {
+            break-inside: avoid;
+          }
+
         }
+
       </style>
+
     </head>
 
+
     <body>
+
       <h1>TUX - Shift Report</h1>
 
-    <div>
-  <strong>Shift:</strong>
-  ${getShiftDisplayNumber(snapshot.id)}
-</div>
-      <div>
-        <strong>Start:</strong>
-        ${snapshot.startDate} ${snapshot.startTime}
+
+      <div class="shift-info">
+
+        <div>
+          <strong>Shift:</strong>
+          ${escapeHtml(shiftDisplayNumber)}
+        </div>
+
+        <div>
+          <strong>Start:</strong>
+          ${escapeHtml(snapshot.startDate || '-')}
+          ${escapeHtml(snapshot.startTime || '-')}
+        </div>
+
+        <div>
+          <strong>End:</strong>
+          ${escapeHtml(snapshot.endDate || '-')}
+          ${escapeHtml(snapshot.endTime || '-')}
+        </div>
+
       </div>
 
-      <div>
-        <strong>End:</strong>
-        ${snapshot.endDate} ${snapshot.endTime}
-      </div>
+
+      <!-- ===================================================
+           FINANCIAL SUMMARY
+           =================================================== -->
+
+      <h2>Shift Summary</h2>
 
       <div class="summary">
+
         <div class="box">
           <strong>Cash</strong><br>
-          ${Number(snapshot.totalCash || 0).toFixed(2)} LE
+          ${formatMoney(snapshot.totalCash)} LE
         </div>
 
         <div class="box">
           <strong>InstaPay</strong><br>
-          ${Number(snapshot.totalInsta || 0).toFixed(2)} LE
+          ${formatMoney(snapshot.totalInsta)} LE
         </div>
 
         <div class="box">
           <strong>Visa</strong><br>
-          ${Number(snapshot.totalVisa || 0).toFixed(2)} LE
+          ${formatMoney(snapshot.totalVisa)} LE
         </div>
 
         <div class="box">
           <strong>Discount</strong><br>
-          ${Number(snapshot.totalDiscount || 0).toFixed(2)} LE
+          ${formatMoney(snapshot.totalDiscount)} LE
         </div>
+
 
         <div class="box">
           <strong>Daily Net Sales (Cash + InstaPay)</strong><br>
-          ${Number(snapshot.totalSales || 0).toFixed(2)} LE
+          ${formatMoney(snapshot.totalSales)} LE
         </div>
 
         <div class="box">
           <strong>Bank</strong><br>
-          ${Number(snapshot.bank || 0).toFixed(2)} LE
+          ${formatMoney(snapshot.bank)} LE
         </div>
 
         <div class="box">
           <strong>Daily Expenses</strong><br>
-          ${Number(
-    snapshot.dailyExpenses ||
-    snapshot.totalExpenses ||
+          ${formatMoney(
+    snapshot.dailyExpenses ??
+    snapshot.totalExpenses ??
     0
-  ).toFixed(2)} LE
+  )} LE
         </div>
 
         <div class="box">
           <strong>Overall Expenses</strong><br>
-          ${Number(snapshot.overallExpenses || 0).toFixed(2)} LE
+          ${formatMoney(snapshot.overallExpenses)} LE
         </div>
+
 
         <div class="box">
           <strong>Daily Orders</strong><br>
-          ${Number(snapshot.dailyOrders || snapshot.totalOrders || 0)}
+          ${Number(
+    snapshot.dailyOrders ??
+    snapshot.totalOrders ??
+    0
+  )}
         </div>
 
         <div class="box">
@@ -560,79 +1163,124 @@ function printShiftReport(snapshot) {
 
         <div class="box">
           <strong>Daily Hurry App (Visa + Discount)</strong><br>
-          ${Number(snapshot.dailyHurryApp || 0).toFixed(2)} LE
+          ${formatMoney(snapshot.dailyHurryApp)} LE
         </div>
 
         <div class="box">
           <strong>Hurry App (Total)</strong><br>
-          ${Number(snapshot.hurryApp || 0).toFixed(2)} LE
+          ${formatMoney(snapshot.hurryApp)} LE
         </div>
+
 
         <div class="box">
           <strong>Profit</strong><br>
-          ${(
-      Number(snapshot.bank || 0) -
-      Number(snapshot.overallExpenses || 0)
-    ).toFixed(2)} LE
+          ${formatMoney(
+    Number(snapshot.bank || 0) -
+    Number(snapshot.overallExpenses || 0)
+  )} LE
         </div>
+
+
+        <!-- DELIVERY TODAY -->
+
+     <div class="box">
+  <strong>Delivery Today</strong><br>
+  ${deliveryToday.toFixed(2)} LE
+</div>
+
+<div class="box">
+  <strong>Overall Delivery</strong><br>
+  ${overallDelivery.toFixed(2)} LE
+</div>
+
+<div class="box">
+  <strong>Cancelled Orders</strong><br>
+  ${cancelledOrders}
+</div>
+
       </div>
 
+
+      <!-- ===================================================
+           ADMIN REPORTS
+           =================================================== -->
 
       <h2>Admin Reports</h2>
 
       <div class="admin-summary">
+
         <div class="admin-box">
           <strong>Admin Cash</strong><br>
-          ${adminCash.toFixed(2)} LE
+          ${formatMoney(adminCash)} LE
         </div>
 
         <div class="admin-box">
           <strong>Admin InstaPay</strong><br>
-          ${adminInstaPay.toFixed(2)} LE
+          ${formatMoney(adminInstaPay)} LE
         </div>
 
         <div class="admin-box">
           <strong>Admin Daily Net Sales</strong><br>
-          ${adminDailyNetSales.toFixed(2)} LE
+          ${formatMoney(adminDailyNetSales)} LE
         </div>
 
         <div class="admin-box">
           <strong>Admin Bank</strong><br>
-          ${adminBank.toFixed(2)} LE
+          ${formatMoney(adminBank)} LE
         </div>
 
         <div class="admin-box">
           <strong>Admin Profit</strong><br>
-          ${adminProfit.toFixed(2)} LE
+          ${formatMoney(adminProfit)} LE
         </div>
+
       </div>
 
+
+      <!-- ===================================================
+           SALES DETAILS
+           =================================================== -->
 
       <h2>Sales Details</h2>
 
       <table>
+
         <thead>
+
           <tr>
             <th>Order</th>
             <th>Time</th>
             <th>Items</th>
+            <th>Staff</th>
             <th>Cash</th>
             <th>InstaPay</th>
             <th>Visa</th>
             <th>Discount</th>
-            <th>Net Sales</th>
+            <th>Delivery Fee</th>
+            <th>Total</th>
+            <th>Status</th>
+            <th>Order Note</th>
           </tr>
+
         </thead>
+
         <tbody>
           ${salesRows}
         </tbody>
+
       </table>
 
+
+      <!-- ===================================================
+           EXPENSES
+           =================================================== -->
 
       <h2>Expenses</h2>
 
       <table>
+
         <thead>
+
           <tr>
             <th>Date/Time</th>
             <th>Expense</th>
@@ -640,56 +1288,116 @@ function printShiftReport(snapshot) {
             <th>Cost</th>
             <th>Notes</th>
           </tr>
+
         </thead>
+
         <tbody>
           ${expenseRows}
         </tbody>
+
       </table>
 
 
+      <!-- ===================================================
+           GAM3YA
+           =================================================== -->
+
       <h2>Gam3ya</h2>
 
-      ${buildGamiyaHtml(
-      snapshot.gamiyaSummary ||
-      buildGamiyaSummary(snapshot.gamiya, snapshot.id)
-    )
+      ${typeof buildGamiyaHtml === 'function'
+
+      ? buildGamiyaHtml(
+        snapshot.gamiyaSummary ||
+        (
+          typeof buildGamiyaSummary === 'function'
+
+            ? buildGamiyaSummary(
+              snapshot.gamiya,
+              snapshot.id
+            )
+
+            : null
+        )
+      )
+
+      : '<p>Gam3ya report is unavailable.</p>'
     }
 
 
+      <!-- ===================================================
+           HAWALK REQUESTS
+           =================================================== -->
+
       <h2>Hawalk Requests</h2>
 
-      <p>
-        Requests shown here were created between the shift start and end times.
-        Stock is deducted only when an authorized reviewer accepts a request.
+      <p class="section-note">
+        Requests shown here were created between the shift
+        start and end times. Stock is deducted only when an
+        authorized reviewer accepts a request.
       </p>
 
-      ${buildHawalkHtml(hawalkRequests)}
+      ${typeof buildHawalkHtml === 'function'
 
+      ? buildHawalkHtml(hawalkRequests)
+
+      : '<p>Hawalk report is unavailable.</p>'
+    }
+
+
+      <!-- ===================================================
+           FOOTER
+           =================================================== -->
 
       <p>
         <strong>
           Report saved automatically in TUX Shift History.
         </strong>
       </p>
+
+
     </body>
+
     </html>
+
   `;
 
-  const reportWindow = window.open('', '_blank');
+
+  /* =========================================================
+     OPEN PRINT WINDOW
+     ========================================================= */
+
+  const reportWindow = window.open(
+    '',
+    '_blank'
+  );
+
 
   if (!reportWindow) {
-    alert('Please allow pop-ups so the Shift Report can be printed.');
+
+    alert(
+      'Please allow pop-ups so the Shift Report can be printed.'
+    );
+
     return;
+
   }
 
+
   reportWindow.document.open();
+
   reportWindow.document.write(html);
+
   reportWindow.document.close();
+
   reportWindow.focus();
 
+
   setTimeout(function () {
+
     reportWindow.print();
+
   }, 300);
+
 }
 
 
@@ -746,14 +1454,29 @@ async function printCurrentShiftReport() {
    PRINT SAVED SHIFT
    ========================================================= */
 
+
 function printShiftReportById(shiftId) {
-  const shift = shiftHistory.find(function (item) {
-    return item.id === shiftId;
+  const history = Array.isArray(shiftHistory)
+    ? shiftHistory
+    : [];
+
+  const shift = history.find(function (item) {
+    return String(
+      item.supabaseId ||
+      item.shift_id ||
+      item.shiftId ||
+      item.id ||
+      ''
+    ) === String(shiftId);
   });
 
   if (!shift) {
+    alert('The selected shift report could not be found.');
     return;
   }
 
+  // Print the selected shift's report only.
   printShiftReport(shift);
 }
+
+

@@ -8,32 +8,30 @@
    ADMIN READ-ONLY PROTECTION
    ========================================================= */
 
+
 function isTuxPosAdminReadOnlyOrders() {
-
-  return (
-    typeof adminActive !== 'undefined' &&
-    adminActive === true &&
-    !(
-      typeof tuxAdminActive !== 'undefined' &&
-      tuxAdminActive === true
-    )
-  );
-
+  // Admin and Tux Admin are both allowed to modify orders.
+  return false;
 }
 
 
-function blockTuxPosAdminOrderMutation(
-  action
-) {
 
-  if (
-    !isTuxPosAdminReadOnlyOrders()
-  ) {
 
+function blockTuxPosAdminOrderMutation(action) {
+  const role =
+    typeof getActiveRole === 'function'
+      ? getActiveRole()
+      : null;
+
+  // Admin and Tux Admin are allowed to create and modify orders.
+  if (role === 'admin' || role === 'tuxadmin') {
     return false;
-
   }
 
+  // Preserve the existing restriction for other roles.
+  if (!isTuxPosAdminReadOnlyOrders()) {
+    return false;
+  }
 
   alert(
     'Admin is view-only. You cannot ' +
@@ -41,9 +39,7 @@ function blockTuxPosAdminOrderMutation(
     '.'
   );
 
-
   return true;
-
 }
 
 
@@ -309,6 +305,7 @@ function stopOrdersRealtime() {
    SAVE ORDER TO SUPABASE
    ========================================================= */
 
+
 async function saveOrderToSupabase(orderData) {
 
   /*
@@ -364,39 +361,27 @@ async function saveOrderToSupabase(orderData) {
        INSERT ORDER HEADER
        ===================================================== */
 
-    const orderPayload = {
+    
+const orderPayload = {
+    order_number: orderData.orderNum,
+    shift_id: currentShift.supabaseId,
+    staff_id: orderData.staffId || null,
+    staff_name: orderData.staffName || null,
 
-      order_number:
-        Number(orderData.orderNum),
+    subtotal: Number(orderData.subtotal || 0),
+    delivery_fee: Number(orderData.deliveryFee || 0),
+    total: Number(orderData.total || 0),
 
-      shift_id:
-        currentShift.supabaseId,
+    cash_paid: Number(orderData.cashPaid || 0),
+    insta_paid: Number(orderData.instaPaid || 0),
+    visa_paid: Number(orderData.visaPaid || 0),
+    discount: Number(orderData.discount || 0),
 
-      staff_id:
-        orderData.staffId || null,
+    status: orderData.status || 'preparing',
+    note: orderData.note || ''
+};
 
-      staff_name:
-        orderData.staffName || null,
 
-      total:
-        Number(orderData.total || 0),
-
-      cash_paid:
-        Number(orderData.cashPaid || 0),
-
-      insta_paid:
-        Number(orderData.instaPaid || 0),
-
-      visa_paid:
-        Number(orderData.visaPaid || 0),
-
-      discount:
-        Number(orderData.discount || 0),
-
-      status:
-        orderData.status || 'preparing'
-
-    };
 
 
     const {
@@ -613,10 +598,88 @@ async function saveOrderToSupabase(orderData) {
 }
 
 
+
+
+/* =========================================================
+   TUX POS — CURRENT ORDER NOTE
+   ========================================================= */
+
+let currentOrderNote = '';
+
+
+/* =========================================================
+   OPEN NOTE EDITOR
+   ========================================================= */
+
+function openOrderNoteModal() {
+
+    const note = prompt(
+        'Write a note for this order:',
+        currentOrderNote
+    );
+
+    // Keep the existing note if the user cancels.
+    if (note === null) {
+        return;
+    }
+
+    currentOrderNote = note.trim();
+
+    renderCurrentOrderNote();
+}
+
+
+/* =========================================================
+   DISPLAY CURRENT ORDER NOTE
+   ========================================================= */
+
+function renderCurrentOrderNote() {
+
+    const display = document.getElementById(
+        'currentOrderNoteDisplay'
+    );
+
+    if (!display) {
+        return;
+    }
+
+    if (!currentOrderNote) {
+
+        display.style.display = 'none';
+        display.textContent = '';
+
+        return;
+    }
+
+    display.style.display = 'block';
+
+    display.textContent =
+        '📝 Order Note: ' + currentOrderNote;
+}
+
+
+/* =========================================================
+   RESET CURRENT ORDER NOTE
+   Call this only when the current order is cleared
+   or successfully sent to the kitchen.
+   ========================================================= */
+
+function clearCurrentOrderNote() {
+
+    currentOrderNote = '';
+
+    renderCurrentOrderNote();
+}
+
+
+
+
+
 /* =========================================================
    LOAD CURRENT SHIFT ORDERS
    Used by Kitchen.
    ========================================================= */
+
 
 async function loadCurrentShiftOrdersFromSupabase() {
 
@@ -630,7 +693,6 @@ async function loadCurrentShiftOrdersFromSupabase() {
       return [];
 
     }
-
 
     const {
       data,
@@ -653,7 +715,6 @@ async function loadCurrentShiftOrdersFromSupabase() {
           }
         );
 
-
     if (error) {
 
       console.error(
@@ -665,8 +726,53 @@ async function loadCurrentShiftOrdersFromSupabase() {
 
     }
 
+    return (data || []).map(function (order) {
 
-    return data || [];
+      return {
+
+        ...order,
+
+        // Preserve the delivery fee under both names.
+        deliveryFee: Number(
+          order.delivery_fee ??
+          order.deliveryFee ??
+          0
+        ),
+
+        // Preserve the saved total and payment amounts.
+        subtotal: Number(
+          order.subtotal || 0
+        ),
+
+        total: Number(
+          order.total || 0
+        ),
+
+        discount: Number(
+          order.discount || 0
+        ),
+
+        cashPaid: Number(
+          order.cash_paid ??
+          order.cashPaid ??
+          0
+        ),
+
+        instaPaid: Number(
+          order.insta_paid ??
+          order.instaPaid ??
+          0
+        ),
+
+        visaPaid: Number(
+          order.visa_paid ??
+          order.visaPaid ??
+          0
+        )
+
+      };
+
+    });
 
   } catch (error) {
 
@@ -680,6 +786,8 @@ async function loadCurrentShiftOrdersFromSupabase() {
   }
 
 }
+
+
 
 
 /* =========================================================
@@ -742,117 +850,109 @@ async function loadOrdersFromSupabase() {
    Used by Kitchen.
    ========================================================= */
 
+
 async function updateOrderStatusInSupabase(
   orderId,
   status
 ) {
-
-  /*
-   * =======================================================
-   * ADMIN READ-ONLY PROTECTION
-   * =======================================================
-   *
-   * This protects the Supabase mutation itself.
-   *
-   * Even if an Admin somehow calls this function directly,
-   * the order status will not be changed.
-   * =======================================================
-   */
-
-  if (
-    blockTuxPosAdminOrderMutation(
-      'change order status'
-    )
-  ) {
-
-    return null;
-
-  }
-
-
   try {
+    /*
+     * VALIDATE STATUS
+     */
+
+    const allowedStatuses = [
+      'preparing',
+      'done',
+      'cancelled'
+    ];
+
+    if (!allowedStatuses.includes(status)) {
+      console.error(
+        'TUX POS — Invalid order status:',
+        status
+      );
+
+      return null;
+    }
+
+    if (!orderId) {
+      console.error(
+        'TUX POS — Cannot update order: missing order ID.'
+      );
+
+      return null;
+    }
+
+    /*
+     * PREPARE UPDATE
+     */
 
     const updateData = {
-
-      status:
-        status
-
+      status: status
     };
 
+    /*
+     * SAVE COMPLETION TIMESTAMP
+     */
 
-    /* =====================================================
-       SAVE COMPLETION TIMESTAMP
-       ===================================================== */
-
-    if (
-      status === 'done'
-    ) {
-
+    if (status === 'done') {
       updateData.completed_at =
         new Date().toISOString();
-
     }
 
+    /*
+     * CLEAR COMPLETION TIMESTAMP
+     * IF ORDER RETURNS TO PREPARING
+     */
 
-    /* =====================================================
-       CLEAR COMPLETION TIMESTAMP
-       IF ORDER GOES BACK TO PREPARING
-       ===================================================== */
-
-    if (
-      status === 'preparing'
-    ) {
-
-      updateData.completed_at =
-        null;
-
+    if (status === 'preparing') {
+      updateData.completed_at = null;
     }
 
+    /*
+     * SAVE TO SUPABASE
+     */
 
     const {
       data,
       error
-    } =
-      await supabaseClient
-        .from('orders')
-        .update(updateData)
-        .eq(
-          'id',
-          orderId
-        )
-        .select('*')
-        .single();
-
+    } = await supabaseClient
+      .from('orders')
+      .update(updateData)
+      .eq('id', orderId)
+      .select('*')
+      .single();
 
     if (error) {
-
       console.error(
         'TUX POS — Failed to update order status:',
         error
       );
 
       return null;
-
     }
 
+    if (!data) {
+      console.error(
+        'TUX POS — Supabase returned no updated order.'
+      );
+
+      return null;
+    }
 
     console.log(
       'TUX POS — Order status saved to Supabase:',
       data
     );
 
-
     return data;
 
   } catch (error) {
-
     console.error(
       'TUX POS — Order status update failed:',
       error
     );
 
     return null;
-
   }
-
 }

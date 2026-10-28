@@ -1,9 +1,17 @@
 
+<!-- =========================================================
+     TUX POS — TOP NAVIGATION
+     Shared Online Users Display
+     ========================================================= -->
+
 <div class="top-nav">
+
+    <!-- BRAND -->
     <div class="nav-brand">
         <span>TUX</span>
     </div>
 
+    <!-- NAVIGATION TABS -->
     <div class="nav-tabs">
 
         <button
@@ -58,9 +66,43 @@
             Workers
         </button>
 
-        <!-- ONLINE WORKERS: ADMIN AND TUX ADMIN ONLY -->
 
-       
+        <!-- =================================================
+             SHARED ONLINE USERS
+             TUX ADMIN + ADMINS + WORKERS
+             ================================================= -->
+
+        <div
+            id="navOnlineUsers"
+            style="
+                display:flex;
+                align-items:center;
+                gap:6px;
+                padding:0 10px;
+                color:#2ecc71;
+                font-size:11px;
+                font-weight:600;
+                white-space:nowrap;
+            "
+        >
+
+            <span style="color:#2ecc71;">
+                ● Online:
+            </span>
+
+            <span
+                id="navOnlineUsersList"
+                style="
+                    color:#f1f1f1;
+                    font-size:11px;
+                    font-weight:600;
+                "
+            >
+                Loading...
+            </span>
+
+        </div>
+
 
         <button
             class="nav-btn"
@@ -78,10 +120,24 @@
             Settings
         </button>
 
-        <!-- SHIFT CONTROLS -->
+<button
+  type="button"
+  id="tuxThemeToggle"
+  class="nav-btn"
+  onclick="toggleTuxTheme()"
+  title="Switch between light and dark mode"
+>
+  ☀️ Light Mode
+</button>
+        <!-- =================================================
+             SHIFT CONTROLS
+             ================================================= -->
 
         <div class="shift-controls">
-            <span class="shift-status" id="shiftStatus">
+
+            <span
+                class="shift-status"
+                id="shiftStatus">
                 Shift Not Started
             </span>
 
@@ -98,12 +154,19 @@
                 onclick="endShift()">
                 ■ End Shift
             </button>
+
         </div>
 
-        <!-- STAFF LOGIN -->
+
+        <!-- =================================================
+             STAFF LOGIN / LOGOUT
+             ================================================= -->
 
         <div class="staff-login-box">
-            <span class="staff-status" id="staffStatus">
+
+            <span
+                class="staff-status"
+                id="staffStatus">
                 Not Logged In
             </span>
 
@@ -120,11 +183,21 @@
                 onclick="openStaffLogout()">
                 Logout
             </button>
+
         </div>
 
     </div>
 
-    <div class="nav-clock" id="liveClock">
+
+    <!-- =====================================================
+         LIVE CLOCK
+         ===================================================== -->
+
+    <div
+        class="nav-clock"
+        id="liveClock">
         25 Sep 2026
     </div>
+
 </div>
+

@@ -1,5 +1,3 @@
-
-
 <!-- =========================================================
      CASHIER VIEW
      ========================================================= -->
@@ -10,9 +8,7 @@
 
         <!-- MENU -->
 
-        <div
-            class="menu-panel"
-            id="menuPanelContainer">
+        <div class="menu-panel" id="menuPanelContainer">
         </div>
 
         <!-- RIGHT PANEL -->
@@ -21,11 +17,7 @@
 
             <!-- LOW STOCK ALERT -->
 
-            <div
-                id="cashierLowStockAlert"
-                role="status"
-                aria-live="polite"
-                style="
+            <div id="cashierLowStockAlert" role="status" aria-live="polite" style="
                     display:none;
                     background:#3a1717;
                     border:1px solid #e74c3c;
@@ -50,9 +42,7 @@
 
             <div class="extras-panel">
 
-                <div
-                    class="section-title"
-                    style="
+                <div class="section-title" style="
                         margin-bottom:3px;
                         background:#1e1e2d;
                         border-left:3px solid #e74c3c;
@@ -60,10 +50,7 @@
                     EXTRAS
                 </div>
 
-                <div
-                    class="menu-grid"
-                    id="extrasGridContainer"
-                    style="grid-template-columns:repeat(4, 1fr);">
+                <div class="menu-grid" id="extrasGridContainer" style="grid-template-columns:repeat(4, 1fr);">
                 </div>
 
             </div>
@@ -77,8 +64,7 @@
 
                     <h2>Current Order</h2>
 
-                    <span
-                        style="
+                    <span style="
                             color:#f1c40f;
                             font-weight:bold;
                             font-size:10px;
@@ -110,16 +96,14 @@
 
                 <!-- CART CONTENT -->
 
-                <div
-                    class="cart-box"
-                    id="cartContent">
+                <div class="cart-box" id="cartContent">
 
-                    <div
-                        style="
+                    <div style="
                             text-align:center;
                             color:#555;
                             margin-top:15px;
                             font-size:10px;
+                         
                         ">
                         No items added yet
                     </div>
@@ -133,13 +117,16 @@
 
                     <span>Total</span>
 
-                    <span
-                        class="total-price"
-                        id="grandTotal">
+                    <span class="total-price" id="grandTotal">
                         0
                     </span>
 
                 </div>
+
+
+
+
+
 
 
                 <!-- PAYMENT -->
@@ -148,57 +135,54 @@
 
                     <div>
                         <label>Cash:</label>
-
-                        <input
-                            type="number"
-                            id="cashPaid"
-                            value="0"
-                            oninput="calcRemaining()">
+                        <input type="number" id="cashPaid" value="" oninput="calcRemaining()">
                     </div>
 
                     <div>
                         <label>InstaPay:</label>
-
-                        <input
-                            type="number"
-                            id="instaPaid"
-                            value="0"
-                            oninput="calcRemaining()">
+                        <input type="number" id="instaPaid" value="" oninput="calcRemaining()">
                     </div>
 
                     <div>
                         <label>Visa:</label>
-
-                        <input
-                            type="number"
-                            id="visaPaid"
-                            value="0"
-                            oninput="calcRemaining()">
+                        <input type="number" id="visaPaid" value="" oninput="calcRemaining()">
                     </div>
 
                     <div>
                         <label>Discount:</label>
-
-                        <input
-                            type="number"
-                            id="discount"
-                            value="0"
-                            oninput="calcRemaining()">
+                        <input type="number" id="discount" value="" min="" oninput="calcRemaining()">
                     </div>
+
+
+                    <div style="grid-column: 1 / -1; width:100%; box-sizing:border-box;">
+                        <label>Delivery:</label>
+                        <input type="number" id="deliveryFee" value="" min="0" step="0.01" oninput="calcRemaining()"
+                            style="width:100%; box-sizing:border-box;">
+                    </div>
+
 
                 </div>
 
 
+
+
+
+
+
+
+
+
+
+
+
                 <!-- PAYMENT DIFFERENCE -->
 
-                <div
-                    style="
+                <div style="
                         font-size:9.5px;
                         margin-bottom:3px;
                         font-weight:bold;
                         text-align:center;
-                    "
-                    id="diffText">
+                    " id="diffText">
                     Diff: 0.00 EGP
                 </div>
 
@@ -207,15 +191,11 @@
 
                 <div class="action-row">
 
-                    <button
-                        class="btn-action btn-cancel"
-                        onclick="cancelLastItem()">
+                    <button class="btn-action btn-cancel" onclick="cancelLastItem()">
                         Cancel Last
                     </button>
 
-                    <button
-                        class="btn-action btn-send"
-                        onclick="sendOrder()">
+                    <button class="btn-action btn-send" onclick="sendOrder()">
                         Send to Kitchen
                     </button>
 
@@ -226,24 +206,57 @@
 
                 <div class="action-row">
 
-                    <button
-                        class="btn-action"
-                        style="background:#16a085;flex:1;"
-                        onclick="sendToGamiya()">
+                    <button class="btn-action" style="background:#16a085;flex:1;" onclick="sendToGamiya()">
                         🍽️ Gam3ya (Staff Meal)
                     </button>
 
                 </div>
+                <!-- ORDER NOTE -->
+
+                <div style="
+        margin:6px 0;
+        display:flex;
+        flex-direction:column;
+        gap:5px;
+    ">
+
+                    <button type="button" class="btn-action" id="writeOrderNoteBtn" onclick="openOrderNoteModal()"
+                        style="
+            width:100%;
+            background:#34495e;
+            border:1px solid #526a82;
+            color:#fff;
+        ">
+                        📝 Write Note
+                    </button>
+
+                    <div id="currentOrderNoteDisplay" style="
+            display:none;
+            padding:7px;
+            background:#252535;
+            border-left:3px solid #f1c40f;
+            border-radius:4px;
+            color:#f1c40f;
+            font-size:11px;
+            white-space:pre-wrap;
+            overflow-wrap:anywhere;
+        ">
+                    </div>
+
+                </div>
+
+
+
+
+
+
 
 
                 <!-- HAWALK -->
 
                 <div class="action-row">
 
-                    <button
-                        class="btn-action"
-                        id="hawalkCashierBtn"
-                        style="background:#8e44ad;flex:1;"
+                    <button class="btn-action" id="hawalkCashierBtn" style="background:#8e44ad;flex:1;"
                         onclick="openHawalkFromCashier()">
                         📦 Hawalk
                     </button>
@@ -255,15 +268,10 @@
 
                 <div class="whatsapp-row">
 
-                    <input
-                        type="text"
-                        id="whatsappNumber"
-                        class="whatsapp-input"
+                    <input type="text" id="whatsappNumber" class="whatsapp-input"
                         placeholder="WhatsApp No (e.g. 2010xxxxxxxx)">
 
-                    <button
-                        class="btn-whatsapp"
-                        onclick="sendToWhatsApp()">
+                    <button class="btn-whatsapp" onclick="sendToWhatsApp()">
                         Send WhatsApp
                     </button>
 
@@ -274,9 +282,7 @@
 
                 <div class="bottom-tools">
 
-                    <button
-                        class="tool-btn clear"
-                        onclick="clearOrder()">
+                    <button class="tool-btn clear" onclick="clearOrder()">
                         Clear All
                     </button>
 
@@ -289,4 +295,3 @@
     </div>
 
 </div>
-

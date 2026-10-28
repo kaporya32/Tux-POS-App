@@ -418,74 +418,51 @@ async function loadAdminReportFinanceFromSupabase() {
    ========================================================= */
 
 async function saveAdminReportFinanceToSupabase() {
-
   ensureAdminReportFinance();
 
   const monthKey =
     getAdminReportMonthKey();
 
-
   const payload = {
-
-    month_key:
-      monthKey,
+    month_key: monthKey,
 
     admin_cash:
-      Number(
-        adminReportFinance.cash || 0
-      ),
+      Number(adminReportFinance.cash || 0),
 
     admin_instapay:
-      Number(
-        adminReportFinance.instaPay || 0
-      ),
+      Number(adminReportFinance.instaPay || 0),
 
     admin_daily_net_sales:
-      Number(
-        adminReportFinance.dailyNetSales || 0
-      ),
+      Number(adminReportFinance.dailyNetSales || 0),
 
     admin_bank:
-      Number(
-        adminReportFinance.bank || 0
-      ),
+      Number(adminReportFinance.bank || 0),
 
     admin_profit:
-      Number(
-        adminReportFinance.profit || 0
-      ),
+      Number(adminReportFinance.profit || 0),
 
     updated_at:
       new Date().toISOString()
-
   };
 
-
-  const { error } =
-    await supabaseClient
-      .from('report_finance')
-      .upsert(
-        payload,
-        {
-          onConflict:
-            'month_key'
-        }
-      );
-
+  const { error } = await supabaseClient
+    .from('report_finance')
+    .upsert(
+      payload,
+      {
+        onConflict: 'month_key'
+      }
+    );
 
   if (error) {
-
     console.error(
       'Failed to save Admin Reports:',
       error
     );
 
     throw error;
-
   }
-
 }
-
 
 /* =========================================================
    REALTIME
@@ -1203,94 +1180,216 @@ async function resetAdminReports() {
    ADMIN BANK ACCUMULATION
    ========================================================= */
 
-async function updateAdminReportsAtEndShift() {
 
-  ensureAdminReportFinance();
+/* =========================================================
+   TUX POS — UPDATE ADMIN REPORTS AT END SHIFT
+   ========================================================= */
 
+async function updateAdminReportsAtEndShift(options = {}) {
+try {
+/* =======================================================
+1. GET THE CLOSED SHIFT DETAILS
+======================================================= */
 
-  const currentCash =
-    Number(
-      adminReportFinance.cash || 0
-    );
+const shiftId = String(
+  options.shiftId ||
+  currentShift?.supabaseId ||
+  currentShift?.id ||
+  ''
+).trim();
 
-  const currentInstaPay =
-    Number(
-      adminReportFinance.instaPay || 0
-    );
+const businessDate = String(
+  options.businessDate ||
+  currentShift?.businessDate ||
+  currentShift?.business_date ||
+  ''
+).trim();
 
+if (!shiftId) {
+  throw new Error(
+    'Cannot update Admin Reports: the shift ID is missing.'
+  );
+}
 
-  const currentDailyNetSales =
-    currentCash +
-    currentInstaPay;
+if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) {
+  throw new Error(
+    'Cannot update Admin Reports: the business date is invalid.'
+  );
+}
 
+const [year, month, day] = businessDate.split('-').map(Number);
 
-  adminReportFinance.bank =
-    Number(
-      adminReportFinance.bank || 0
-    ) +
-    currentDailyNetSales;
+const parsedDate = new Date(
+  Date.UTC(year, month - 1, day)
+);
 
+if (
+  parsedDate.getUTCFullYear() !== year ||
+  parsedDate.getUTCMonth() !== month - 1 ||
+  parsedDate.getUTCDate() !== day
+) {
+  throw new Error(
+    'Cannot update Admin Reports: the business date is invalid.'
+  );
+}
 
-  adminReportFinance.cash =
-    0;
+const monthKey =
+  `${year}-${String(month).padStart(2, '0')}`;
 
-  adminReportFinance.instaPay =
-    0;
+/* =======================================================
+   2. ENSURE FINANCE OBJECTS EXIST
+   ======================================================= */
 
-  adminReportFinance.dailyNetSales =
-    0;
+ensureAdminReportFinance();
+ensureMonthlyFinance();
 
+/* =======================================================
+   3. CAPTURE DAILY VALUES
+   ======================================================= */
 
-  let overallExpenses =
-    0;
+const cashAdded = Number(
+  adminReportFinance.cash || 0
+);
 
-  try {
+const instaPayAdded = Number(
+  adminReportFinance.instaPay || 0
+);
 
-    ensureMonthlyFinance();
+if (
+  !Number.isFinite(cashAdded) ||
+  !Number.isFinite(instaPayAdded) ||
+  cashAdded < 0 ||
+  instaPayAdded < 0
+) {
+  throw new Error(
+    'Admin Reports contains invalid Cash or InstaPay values.'
+  );
+}
 
-    overallExpenses =
-      Number(
-        monthlyFinance &&
-        monthlyFinance.overallExpenses
-          ? monthlyFinance.overallExpenses
-          : 0
-      );
+/* =======================================================
+   4. APPLY THE IDEMPOTENT SUPABASE TRANSACTION
+   ======================================================= */
 
-  } catch (error) {
-
-    overallExpenses =
-      0;
-
+const { data, error } = await supabaseClient.rpc(
+  'apply_shift_admin_reports_once',
+  {
+    p_shift_id: shiftId,
+    p_month_key: monthKey,
+    p_cash_added: cashAdded,
+    p_instapay_added: instaPayAdded
   }
+);
 
+if (error) {
+  console.error(
+    'TUX POS — Admin Reports RPC failed:',
+    error
+  );
 
-  adminReportFinance.profit =
-    adminReportFinance.bank -
-    overallExpenses;
+  throw error;
+}
 
+if (!data || data.success !== true) {
+  throw new Error(
+    'The Admin Reports transaction returned an unexpected result.'
+  );
+}
 
-  try {
+/* =======================================================
+   5. RELOAD THE SAVED FINANCE ROW
+   ======================================================= */
 
-    await saveAdminReportFinanceToSupabase();
+const {
+  data: financeRow,
+  error: financeLoadError
+} = await supabaseClient
+  .from('report_finance')
+  .select(`
+    admin_cash,
+    admin_instapay,
+    admin_daily_net_sales,
+    admin_bank,
+    admin_profit
+  `)
+  .eq('month_key', monthKey)
+  .maybeSingle();
 
-    renderAdminReports();
+if (financeLoadError) {
+  console.error(
+    'TUX POS — Admin Reports finance reload failed:',
+    financeLoadError
+  );
 
-    closeAdminReportEditPanel();
+  throw financeLoadError;
+}
 
-    return true;
+if (!financeRow) {
+  throw new Error(
+    `The Admin Reports finance row for ${monthKey} was not found.`
+  );
+}
 
-  } catch (error) {
+/* =======================================================
+   6. SYNCHRONIZE LOCAL VALUES
+   ======================================================= */
 
-    console.error(
-      'updateAdminReportsAtEndShift error:',
-      error
-    );
+adminReportFinance.cash =
+  Number(financeRow.admin_cash || 0);
 
-    return false;
+adminReportFinance.instaPay =
+  Number(financeRow.admin_instapay || 0);
 
+adminReportFinance.dailyNetSales =
+  Number(financeRow.admin_daily_net_sales || 0);
+
+adminReportFinance.bank =
+  Number(financeRow.admin_bank || 0);
+
+adminReportFinance.profit =
+  Number(financeRow.admin_profit || 0);
+
+/* =======================================================
+   7. REFRESH THE UI
+   ======================================================= */
+
+if (typeof renderAdminReports === 'function') {
+  renderAdminReports();
+}
+
+if (typeof renderSalesReport === 'function') {
+  renderSalesReport();
+}
+
+console.log(
+  'TUX POS — Admin Reports processed:',
+  {
+    shiftId,
+    monthKey,
+    alreadyProcessed: data.already_processed === true,
+    bank: adminReportFinance.bank,
+    profit: adminReportFinance.profit
   }
+);
+
+return true;
+
+
+} catch (error) {
+console.error(
+'TUX POS — Admin Reports processing failed:',
+error
+);
+
+
+return false;
+
 
 }
+}
+
+
+
+
 
 
 /* =========================================================

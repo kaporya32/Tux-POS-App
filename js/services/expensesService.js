@@ -22,16 +22,24 @@ function isTuxPosExpensesAdminReadOnly() {
 }
 
 
-function blockTuxPosExpensesMutation(
-  action
-) {
 
+function blockTuxPosExpensesMutation(action) {
   if (!isTuxPosExpensesAdminReadOnly()) {
-
     return false;
-
   }
 
+  const allowedAdminActions = [
+    'add expenses',
+    'delete expenses'
+  ];
+
+  if (
+    allowedAdminActions.includes(
+      String(action || '').trim().toLowerCase()
+    )
+  ) {
+    return false;
+  }
 
   alert(
     'Admin is view-only. You cannot ' +
@@ -39,10 +47,10 @@ function blockTuxPosExpensesMutation(
     '.'
   );
 
-
   return true;
-
 }
+
+
 
 
 /* =========================================================
@@ -701,18 +709,24 @@ async function deleteExpenseFromSupabase(
 
 /* =========================================================
    DELETE ALL EXPENSES
-   TUX ADMIN ONLY
+   TUX ADMIN + ADMIN
    ========================================================= */
 
 async function deleteAllExpensesFromSupabase() {
 
-  if (
-    typeof tuxAdminActive === 'undefined' ||
-    tuxAdminActive !== true
-  ) {
+  const isTuxAdmin =
+    typeof tuxAdminActive !== 'undefined' &&
+    tuxAdminActive === true;
+
+  const isAdmin =
+    typeof adminActive !== 'undefined' &&
+    adminActive === true;
+
+  // Only TUX Admin and Admin can delete all expenses.
+  if (!isTuxAdmin && !isAdmin) {
 
     alert(
-      'Only Tux Admin can delete all expenses and purchases.'
+      'You do not have permission to delete all expenses and purchases.'
     );
 
     return false;
@@ -852,6 +866,7 @@ async function deleteAllExpensesFromSupabase() {
   }
 
 }
+
 
 
 /* =========================================================

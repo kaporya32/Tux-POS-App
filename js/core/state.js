@@ -168,20 +168,17 @@ let orderCounter = Number(
 
 
 /* =========================================================
-   PERMISSIONS / ROLES
-   ========================================================= */
-
-const DEFAULT_TUX_ADMIN_PASSWORD =
-  'TuxAdmin#2026';
-
+PERMISSIONS / ROLES
+========================================================= */
 
 let adminAccount = JSON.parse(
-  localStorage.getItem('tuxAdminAccount') || 'null'
+localStorage.getItem('tuxAdminAccount') || 'null'
 );
 
 let tuxAdminActive = false;
 
 let adminActive = false;
+
 
 
 /* =========================================================

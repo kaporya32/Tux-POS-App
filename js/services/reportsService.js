@@ -30,6 +30,12 @@ let reportsRealtimeRefreshTimer = null;
    LOAD ALL SALES
    ========================================================= */
 
+
+/* =========================================================
+   LOAD ALL SALES
+   Includes order notes for Reports order details.
+   ========================================================= */
+
 async function loadReportSalesFromSupabase() {
 
   try {
@@ -48,7 +54,9 @@ async function loadReportSalesFromSupabase() {
           insta_paid,
           visa_paid,
           discount,
+          delivery_fee,
           status,
+          note,
           created_at,
           completed_at,
           order_items (
@@ -180,8 +188,23 @@ async function loadReportSalesFromSupabase() {
                 order.discount || 0
               ),
 
+            // DELIVERY FEE
+            deliveryFee:
+              Math.max(
+                0,
+                Number(
+                  order.delivery_fee ?? 0
+                )
+              ),
+
             status:
               order.status || 'preparing',
+
+            // ORDER NOTE
+            note:
+              String(
+                order.note || ''
+              ),
 
             time:
               createdAt.toLocaleTimeString(
@@ -210,6 +233,34 @@ async function loadReportSalesFromSupabase() {
       );
 
 
+    console.log(
+      'TUX POS — Report sales loaded:',
+      reportSales.length
+    );
+
+
+    console.log(
+      'TUX POS — Orders with delivery fees:',
+      reportSales.filter(
+        function (order) {
+          return order.deliveryFee > 0;
+        }
+      ).length
+    );
+
+
+    console.log(
+      'TUX POS — Orders with notes:',
+      reportSales.filter(
+        function (order) {
+          return Boolean(
+            String(order.note || '').trim()
+          );
+        }
+      ).length
+    );
+
+
     return reportSales;
 
   }
@@ -228,6 +279,7 @@ async function loadReportSalesFromSupabase() {
   }
 
 }
+
 
 
 /* =========================================================

@@ -40,154 +40,70 @@ function escapeHawalkHtml(value) {
    CREATE DELETE BUTTON AUTOMATICALLY
    ========================================================= */
 
+
+
 function ensureHawalkDeleteButton() {
+  const refreshButton = document.getElementById(
+    'refreshHawalkBtn'
+  );
 
-  /*
-   * If the button already exists, do nothing.
-   */
+  const deleteButton = document.getElementById(
+    'deleteHawalkDataBtn'
+  );
 
-  let deleteButton =
-    document.getElementById(
-      'deleteHawalkDataBtn'
-    );
-
-  if (deleteButton) {
-    return deleteButton;
-  }
-
-
-  /*
-   * Find the existing Refresh button.
-   *
-   * We support both possible versions:
-   *
-   * onclick="refreshHawalk()"
-   *
-   * and
-   *
-   * onclick="renderHawalkView()"
-   */
-
-  let refreshButton =
-    document.querySelector(
-      '#hawalk-view button[onclick*="refreshHawalk"]'
-    );
-
-
+  // The Hawalk HTML may not have loaded yet.
   if (!refreshButton) {
+    if (!window.__hawalkButtonObserver && document.documentElement) {
+      window.__hawalkButtonObserver = new MutationObserver(() => {
+        const refreshExists = document.getElementById(
+          'refreshHawalkBtn'
+        );
 
-    refreshButton =
-      document.querySelector(
-        '#hawalk-view button[onclick*="renderHawalkView"]'
+        if (refreshExists) {
+          window.__hawalkButtonObserver.disconnect();
+          window.__hawalkButtonObserver = null;
+
+          ensureHawalkDeleteButton();
+        }
+      });
+
+      window.__hawalkButtonObserver.observe(
+        document.documentElement,
+        {
+          childList: true,
+          subtree: true
+        }
       );
+    }
 
+    return null;
   }
 
-
-  /*
-   * If Refresh button cannot be found,
-   * do not create a random button somewhere else.
-   */
-
-  if (!refreshButton) {
-
+  if (!deleteButton) {
     console.warn(
-      'TUX POS — Hawalk Refresh button was not found.'
+      'TUX POS — #deleteHawalkDataBtn was not found.'
     );
 
     return null;
-
   }
 
-
-  /*
-   * Create Delete Data button.
-   */
-
-  deleteButton =
-    document.createElement('button');
-
-
-  deleteButton.type =
-    'button';
-
-
-  deleteButton.id =
-    'deleteHawalkDataBtn';
-
-
-  deleteButton.className =
-    'tool-btn';
-
-
-  deleteButton.textContent =
-    '🗑️ Delete Data';
-
-
-  deleteButton.title =
-    'Delete all Hawalk data';
-
-
-  deleteButton.style.width =
-    'auto';
-
-
-  deleteButton.style.padding =
-    '5px 10px';
-
-
-  deleteButton.style.marginLeft =
-    '6px';
-
-
-  deleteButton.style.background =
-    '#c0392b';
-
-
-  deleteButton.style.color =
-    '#ffffff';
-
-
-  deleteButton.style.border =
-    'none';
-
-
-  deleteButton.style.cursor =
-    'pointer';
-
-
-  deleteButton.style.display =
-    'none';
-
-
-  deleteButton.addEventListener(
-    'click',
-    function () {
-
-      deleteAllHawalkData();
-
-    }
-  );
-
-
-  /*
-   * Put the button directly beside Refresh.
-   */
-
-  refreshButton.insertAdjacentElement(
-    'afterend',
-    deleteButton
-  );
-
+  // Keep Delete Data beside Refresh.
+  if (refreshButton.nextElementSibling !== deleteButton) {
+    refreshButton.insertAdjacentElement(
+      'afterend',
+      deleteButton
+    );
+  }
 
   console.log(
-    'TUX POS — Hawalk Delete Data button created.'
+    'TUX POS — Hawalk Refresh and Delete Data buttons found.'
   );
 
-
   return deleteButton;
-
 }
+
+
+
 
 
 /* =========================================================
@@ -704,7 +620,7 @@ async function renderHawalkWorkerRequestTable() {
           item.unit || 'piece'
         );
 
-        unitTd.style.textAlign = "center";
+      unitTd.style.textAlign = "center";
 
       tr.appendChild(
         unitTd
@@ -1400,142 +1316,195 @@ async function declineHawalk(requestId) {
    DELETE ALL HAWALK DATA
    ========================================================= */
 
+/* =========================================================
+   HAWALK — DELETE ALL REQUESTS
+   TUX Admin only
+   Deletes both:
+   1. Hawalk Requests
+   2. 📝 Other Requests
+   ========================================================= */
+
+
+/* =========================================================
+   TUX POS — DELETE ALL HAWALK DATA
+   Deletes both Hawalk Requests and Other Requests
+   Tux Admin only
+   ========================================================= */
+
 async function deleteAllHawalkData() {
+    try {
+        /* =========================================
+           PERMISSION CHECK
+           ========================================= */
 
-  const role =
-    typeof getActiveRole === 'function'
-      ? getActiveRole()
-      : null;
+        const role =
+            typeof getActiveRole === 'function'
+                ? getActiveRole()
+                : null;
 
+        if (role !== 'tuxadmin') {
+            alert(
+                'Only Tux Admin can delete Hawalk data.'
+            );
 
-  if (
-    role !== 'tuxadmin'
-  ) {
-
-    alert(
-      'Only Tux Admin can delete Hawalk data.'
-    );
-
-    return;
-
-  }
-
-
-  const confirmed =
-    confirm(
-      '⚠️ DELETE ALL HAWALK DATA?\n\n' +
-      'This will permanently delete ALL Hawalk requests and history.\n\n' +
-      'Accepted, Declined, and Pending requests will all be deleted.\n\n' +
-      'Stock quantities will NOT be changed.\n\n' +
-      'This action cannot be undone.'
-    );
+            return false;
+        }
 
 
-  if (!confirmed) {
-    return;
-  }
+        /* =========================================
+           SUPABASE CLIENT CHECK
+           ========================================= */
+
+        if (
+            typeof supabaseClient === 'undefined' ||
+            !supabaseClient
+        ) {
+            alert(
+                'Supabase client is unavailable.'
+            );
+
+            return false;
+        }
 
 
-  const secondConfirmed =
-    confirm(
-      'FINAL WARNING!\n\n' +
-      'Delete ALL Hawalk data permanently?'
-    );
+        /* =========================================
+           FIRST CONFIRMATION
+           ========================================= */
+
+        const firstConfirmation = confirm(
+            'DELETE ALL HAWALK DATA?\n\n' +
+            'This will permanently delete:\n' +
+            '• Hawalk Requests\n' +
+            '• 📝 Other Requests\n\n' +
+            'Stock quantities will not be changed.\n\n' +
+            'Do you want to continue?'
+        );
+
+        if (!firstConfirmation) {
+            return false;
+        }
 
 
-  if (!secondConfirmed) {
-    return;
+        /* =========================================
+           SECOND CONFIRMATION
+           ========================================= */
 
-  }
+        const secondConfirmation = confirm(
+            'FINAL CONFIRMATION\n\n' +
+            'Both Hawalk request lists will be cleared.\n' +
+            'This action cannot be undone.\n\n' +
+            'Delete everything?'
+        );
 
-
-  const deleteButton =
-    document.getElementById(
-      'deleteHawalkDataBtn'
-    );
-
-
-  try {
-
-    if (deleteButton) {
-
-      deleteButton.disabled =
-        true;
-
-      deleteButton.textContent =
-        '⏳ Deleting...';
-
-    }
+        if (!secondConfirmation) {
+            return false;
+        }
 
 
-    const {
-      error
-    } =
-      await supabaseClient
-        .from('hawalk_requests')
-        .delete()
-        .not(
-          'id',
-          'is',
-          null
+        /* =========================================
+           DELETE HAWALK REQUESTS
+           ========================================= */
+
+        const {
+            error: hawalkError
+        } = await supabaseClient
+            .from('hawalk_requests')
+            .delete()
+            .not('id', 'is', null);
+
+        if (hawalkError) {
+            console.error(
+                'Failed to delete Hawalk Requests:',
+                hawalkError
+            );
+
+            throw new Error(
+                'Could not delete Hawalk Requests: ' +
+                hawalkError.message
+            );
+        }
+
+
+        /* =========================================
+           DELETE OTHER REQUESTS
+           ========================================= */
+
+        const {
+            error: otherError
+        } = await supabaseClient
+            .from('hawalk_other_requests')
+            .delete()
+            .not('id', 'is', null);
+
+        if (otherError) {
+            console.error(
+                'Failed to delete Other Requests:',
+                otherError
+            );
+
+            throw new Error(
+                'Hawalk Requests were deleted, but Other Requests ' +
+                'could not be deleted: ' +
+                otherError.message
+            );
+        }
+
+
+        /* =========================================
+           RELOAD BOTH LISTS
+           ========================================= */
+
+        await Promise.all([
+            loadHawalkRequestsFromSupabase(),
+            loadHawalkOtherRequestsFromSupabase()
+        ]);
+
+
+        /* =========================================
+           NOTIFY THE UI
+           ========================================= */
+
+        window.dispatchEvent(
+            new CustomEvent('tux-hawalk-updated')
+        );
+
+        window.dispatchEvent(
+            new CustomEvent('tux-hawalk-other-updated')
         );
 
 
-    if (error) {
-      throw error;
+        /* =========================================
+           SUCCESS
+           ========================================= */
+
+        console.log(
+            'TUX POS — All Hawalk data deleted successfully.'
+        );
+
+        alert(
+            'Success!\n\n' +
+            'Hawalk Requests and 📝 Other Requests have been deleted.'
+        );
+
+        return true;
+
+    } catch (error) {
+        console.error(
+            'TUX POS — Delete All Hawalk Data Error:',
+            error
+        );
+
+        alert(
+            'Failed to delete all Hawalk data.\n\n' +
+            (error.message || 'Unknown error') +
+            '\n\nCheck the browser console for details.'
+        );
+
+        return false;
     }
-
-
-    if (
-      typeof loadHawalkRequestsFromSupabase ===
-      'function'
-    ) {
-
-      await loadHawalkRequestsFromSupabase();
-
-    }
-
-
-    await renderHawalkAdminRequests();
-
-
-    alert(
-      'All Hawalk data has been deleted successfully.'
-    );
-
-
-  } catch (error) {
-
-    console.error(
-      'TUX POS — Delete Hawalk data failed:',
-      error
-    );
-
-
-    alert(
-      'Could not delete Hawalk data.\n\n' +
-      (
-        error.message ||
-        'Unknown error.'
-      )
-    );
-
-
-  } finally {
-
-    if (deleteButton) {
-
-      deleteButton.disabled =
-        false;
-
-      deleteButton.textContent =
-        '🗑️ Delete Data';
-
-    }
-
-  }
-
 }
+
+
 
 
 /* =========================================================
@@ -1553,7 +1522,7 @@ async function renderHawalkView() {
 
 
   applyHawalkRoleUI();
-
+  await renderHawalkOtherRequestsUI();
 
   const role =
     typeof getActiveRole === 'function'
@@ -1668,5 +1637,862 @@ window.addEventListener(
 
     }
 
+  }
+);
+/* =========================================================
+   TUX POS — HAWALK OTHER REQUESTS
+   Expense requests + new stock item requests
+   ========================================================= */
+
+
+/* =========================================================
+   CREATE WORKER FORM
+   ========================================================= */
+
+
+
+/* =========================================================
+   WORKER OTHER REQUEST FORM
+   Use the existing two-field form from the HTML.
+   Do NOT generate the old Expense / New Stock Item form.
+   ========================================================= */
+
+function ensureHawalkOtherWorkerForm() {
+  const activeRole =
+    typeof getActiveRole === 'function'
+      ? String(getActiveRole()).trim().toLowerCase()
+      : '';
+
+  const existingSection = document.getElementById(
+    'hawalkOtherRequestSection'
+  );
+
+  if (activeRole !== 'worker') {
+    if (existingSection) {
+      existingSection.style.display = 'none';
+    }
+
+    return null;
+  }
+
+  if (!existingSection) {
+    console.warn(
+      'TUX POS — Existing #hawalkOtherRequestSection was not found in the HTML.'
+    );
+
+    return null;
+  }
+
+  existingSection.style.display = '';
+
+  return existingSection;
+}
+
+
+
+
+
+
+/* =========================================================
+   SHOW/HIDE STOCK ITEM FIELDS
+   ========================================================= */
+
+function updateHawalkOtherRequestFields() {
+  const type = document.getElementById(
+    'hawalkOtherType'
+  );
+
+  const quantityGroup = document.getElementById(
+    'hawalkOtherQuantityGroup'
+  );
+
+  const unitGroup = document.getElementById(
+    'hawalkOtherUnitGroup'
+  );
+
+  const quantityInput = document.getElementById(
+    'hawalkOtherQuantity'
+  );
+
+  const unitInput = document.getElementById(
+    'hawalkOtherUnit'
+  );
+
+  const nameLabel = document.getElementById(
+    'hawalkOtherNameLabel'
+  );
+
+  const nameInput = document.getElementById(
+    'hawalkOtherName'
+  );
+
+  if (
+    !type ||
+    !quantityGroup ||
+    !unitGroup ||
+    !quantityInput ||
+    !unitInput ||
+    !nameLabel ||
+    !nameInput
+  ) {
+    return;
+  }
+
+  const isStockItem =
+    type.value === 'New Stock Item';
+
+  quantityGroup.style.display =
+    isStockItem ? 'block' : 'none';
+
+  unitGroup.style.display =
+    isStockItem ? 'block' : 'none';
+
+  quantityInput.required = isStockItem;
+  unitInput.required = isStockItem;
+
+  nameLabel.textContent = isStockItem
+    ? 'New Stock Item Name'
+    : 'Expense Name';
+
+  nameInput.placeholder = isStockItem
+    ? 'Enter the item name'
+    : 'Enter the expense name';
+
+  quantityInput.disabled = !isStockItem;
+  unitInput.disabled = !isStockItem;
+
+  if (!isStockItem) {
+    quantityInput.value = '';
+    unitInput.value = '';
+  }
+}
+
+
+/* =========================================================
+   SUBMIT OTHER REQUEST
+   ========================================================= */
+
+
+
+async function submitHawalkOtherRequest() {
+
+  // Only workers can submit requests.
+  if (
+    typeof getActiveRole === 'function' &&
+    String(getActiveRole()).trim().toLowerCase() !== 'worker'
+  ) {
+    alert('Only a Worker can submit this request.');
+    return;
+  }
+
+  // Get the two input fields.
+  const type = document.getElementById('hawalkOtherType');
+  const quantity = document.getElementById('hawalkOtherQuantity');
+
+  const submitButton = document.getElementById(
+    'submitHawalkOtherRequestBtn'
+  );
+
+  if (!type || !quantity || !submitButton) {
+    alert('The Other Request form could not be found.');
+    return;
+  }
+
+  // Validate Request Type.
+  const requestType = type.value.trim();
+
+  if (!requestType) {
+    alert('Please enter the request type.');
+    type.focus();
+    return;
+  }
+
+  // Validate Quantity.
+  const quantityValue = quantity.value.trim();
+  const requestQuantity =
+    quantityValue === '' ? NaN : Number(quantityValue);
+
+  if (
+    !Number.isFinite(requestQuantity) ||
+    requestQuantity <= 0
+  ) {
+    alert('Please enter a quantity greater than zero.');
+    quantity.focus();
+    return;
+  }
+
+  // Confirm submission.
+  const confirmed = confirm(
+    'Submit this Other Request?\n\n' +
+    'Request Type: ' + requestType + '\n' +
+    'Quantity: ' + requestQuantity + '\n\n' +
+    'Admin will review this request.'
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+
+    submitButton.disabled = true;
+    submitButton.textContent = '⏳ Submitting...';
+
+    // Save the request.
+    await createHawalkOtherRequest({
+      requestType: requestType,
+      quantity: requestQuantity
+    });
+
+    // Clear the two fields after successful submission.
+    type.value = '';
+    quantity.value = '';
+
+    alert(
+      'Other Request submitted successfully.\n\n' +
+      'Admin can now review it.'
+    );
+
+    // Refresh the requests list.
+    if (typeof renderHawalkOtherRequestsUI === 'function') {
+      await renderHawalkOtherRequestsUI();
+    }
+
+  } catch (error) {
+
+    console.error(
+      'TUX POS — Other Request submission failed:',
+      error
+    );
+
+    alert(
+      'Could not submit the request.\n\n' +
+      (error.message || 'Unknown error.')
+    );
+
+  } finally {
+
+    submitButton.disabled = false;
+    submitButton.textContent = '📨 Submit Other Request';
+
+  }
+}
+
+
+
+/* =========================================================
+   ADMIN OTHER REQUESTS CONTAINER
+   ========================================================= */
+
+function ensureHawalkOtherAdminContainer() {
+  const adminSection = document.getElementById(
+    'hawalkAdminSection'
+  );
+
+  if (!adminSection) {
+    return null;
+  }
+
+  let container = document.getElementById(
+    'hawalkOtherAdminRequests'
+  );
+
+  if (container) {
+    return container;
+  }
+
+  container = document.createElement('div');
+
+  container.id = 'hawalkOtherAdminRequests';
+
+  container.style.cssText = `
+        margin-top:24px;
+        padding:20px;
+        background:#171725;
+        border:1px solid #34344a;
+        border-radius:12px;
+    `;
+
+  container.innerHTML = `
+        <h3 style="margin-top:0;color:#fff;">
+            📝 Other Requests
+        </h3>
+
+        <p style="color:#aaa;font-size:13px;">
+            Accepting or declining a request changes only its status.
+            Add accepted expenses or stock items manually in their
+            respective Admin sections.
+        </p>
+
+        <div style="overflow-x:auto;">
+            <table style="
+                width:100%;
+                border-collapse:collapse;
+                color:#fff;
+                min-width:850px;
+            ">
+                <thead>
+                    <tr style="background:#222235;">
+                        <th style="padding:10px;text-align:left;">Date</th>
+                        <th style="padding:10px;text-align:left;">Worker</th>
+                        <th style="padding:10px;text-align:left;">Type</th>
+                        <th style="padding:10px;text-align:left;">Request</th>
+                        <th style="padding:10px;text-align:left;">Details</th>
+                        <th style="padding:10px;text-align:left;">Reason</th>
+                        <th style="padding:10px;text-align:left;">Status</th>
+                        <th style="padding:10px;text-align:left;">Actions</th>
+                    </tr>
+                </thead>
+
+                <tbody id="hawalkOtherAdminRequestsBody">
+                    <tr>
+                        <td colspan="8" style="padding:20px;text-align:center;">
+                            Loading requests...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    `;
+
+  adminSection.appendChild(container);
+
+  return container;
+}
+
+
+/* =========================================================
+   RENDER WORKER REQUEST HISTORY
+   ========================================================= */
+
+function renderHawalkOtherWorkerHistory(requests) {
+  const container = document.getElementById(
+    'hawalkOtherWorkerHistory'
+  );
+
+  if (!container) {
+    return;
+  }
+
+  const role =
+    typeof getActiveRole === 'function'
+      ? getActiveRole()
+      : null;
+
+  if (role !== 'worker') {
+    container.innerHTML = '';
+    return;
+  }
+
+  let worker = null;
+
+  if (
+    typeof getCurrentHawalkWorker === 'function'
+  ) {
+    worker = getCurrentHawalkWorker();
+  }
+
+  const workerId = worker
+    ? String(worker.id)
+    : null;
+
+  const workerName = worker
+    ? String(worker.name || '')
+    : null;
+
+  const ownRequests = (requests || []).filter(
+    function (request) {
+      if (
+        workerId &&
+        request.worker_id !== null &&
+        request.worker_id !== undefined
+      ) {
+        return String(request.worker_id) === workerId;
+      }
+
+      return (
+        workerName &&
+        String(request.worker_name || '') === workerName
+      );
+    }
+  );
+
+  container.innerHTML = `
+        <h4 style="color:#fff;">My Other Requests</h4>
+        <div id="hawalkOtherWorkerHistoryRows"></div>
+    `;
+
+  const rows = document.getElementById(
+    'hawalkOtherWorkerHistoryRows'
+  );
+
+  if (!ownRequests.length) {
+    rows.innerHTML = `
+            <p style="color:#999;">
+                You haven't submitted any Other Requests yet.
+            </p>
+        `;
+    return;
+  }
+
+  ownRequests.forEach(function (request) {
+    const card = document.createElement('div');
+
+    card.style.cssText = `
+            margin-bottom:10px;
+            padding:12px;
+            background:#11111c;
+            border:1px solid #34344a;
+            border-radius:8px;
+        `;
+
+    const statusColors = {
+      Pending: '#f1c40f',
+      Accepted: '#2ecc71',
+      Declined: '#e74c3c'
+    };
+
+    const statusColor =
+      statusColors[request.status] || '#aaa';
+
+    const details = [];
+
+    if (
+      request.request_type === 'New Stock Item'
+    ) {
+      details.push(
+        'Quantity: ' +
+        formatHawalkNumber(request.quantity) +
+        ' ' +
+        escapeHawalkHtml(request.unit || '')
+      );
+    }
+
+    if (
+      request.cost !== null &&
+      request.cost !== undefined
+    ) {
+      details.push(
+        'Estimated cost: ' +
+        formatHawalkNumber(request.cost) +
+        ' EGP'
+      );
+    }
+
+    card.innerHTML = `
+            <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                <strong style="color:#fff;">
+                    ${escapeHawalkHtml(request.name)}
+                </strong>
+
+                <strong style="color:${statusColor};">
+                    ${escapeHawalkHtml(request.status)}
+                </strong>
+            </div>
+
+            <div style="margin-top:6px;color:#bbb;">
+                ${escapeHawalkHtml(request.request_type)}
+            </div>
+
+            ${details.length
+        ? `
+                        <div style="margin-top:6px;color:#bbb;">
+                            ${details.join(' • ')}
+                        </div>
+                    `
+        : ''
+      }
+
+            <div style="margin-top:8px;color:#aaa;white-space:pre-wrap;">
+                ${escapeHawalkHtml(request.reason || '')}
+            </div>
+
+            <div style="margin-top:8px;color:#777;font-size:12px;">
+                Submitted: ${request.created_at
+        ? escapeHawalkHtml(
+          new Date(request.created_at).toLocaleString()
+        )
+        : '-'
+      }
+            </div>
+        `;
+
+    container.querySelector(
+      '#hawalkOtherWorkerHistoryRows'
+    ).appendChild(card);
+  });
+}
+
+
+/* =========================================================
+   RENDER ADMIN OTHER REQUESTS
+   ========================================================= */
+
+async function renderHawalkOtherAdminRequests() {
+  const tbody = document.getElementById(
+    'hawalkOtherAdminRequestsBody'
+  );
+
+  if (!tbody) {
+    return;
+  }
+
+  try {
+    await loadHawalkOtherRequestsFromSupabase();
+
+    const requests = Array.isArray(
+      window.hawalkOtherRequests
+    )
+      ? window.hawalkOtherRequests
+      : [];
+
+    tbody.innerHTML = '';
+
+    if (!requests.length) {
+      tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" style="padding:20px;text-align:center;color:#999;">
+                        No Other Requests yet.
+                    </td>
+                </tr>
+            `;
+      return;
+    }
+
+    requests.forEach(function (request) {
+      const tr = document.createElement('tr');
+
+      tr.style.borderBottom = '1px solid #34344a';
+
+      const date = request.created_at
+        ? new Date(request.created_at).toLocaleString()
+        : '-';
+
+      const details = [];
+
+      if (
+        request.request_type === 'New Stock Item'
+      ) {
+        details.push(
+          'Quantity: ' +
+          formatHawalkNumber(request.quantity) +
+          ' ' +
+          String(request.unit || '')
+        );
+      }
+
+      if (
+        request.cost !== null &&
+        request.cost !== undefined
+      ) {
+        details.push(
+          'Estimated cost: ' +
+          formatHawalkNumber(request.cost) +
+          ' EGP'
+        );
+      }
+
+      const statusColors = {
+        Pending: '#f1c40f',
+        Accepted: '#2ecc71',
+        Declined: '#e74c3c'
+      };
+
+      const statusColor =
+        statusColors[request.status] || '#aaa';
+
+      const dateTd = document.createElement('td');
+      dateTd.style.padding = '10px';
+      dateTd.textContent = date;
+
+      const workerTd = document.createElement('td');
+      workerTd.style.padding = '10px';
+      workerTd.textContent = request.worker_name || '-';
+
+      const typeTd = document.createElement('td');
+      typeTd.style.padding = '10px';
+      typeTd.textContent = request.request_type || '-';
+
+      const nameTd = document.createElement('td');
+      nameTd.style.padding = '10px';
+      nameTd.textContent = request.name || '-';
+
+      const detailsTd = document.createElement('td');
+      detailsTd.style.padding = '10px';
+      detailsTd.textContent = details.join(' • ') || '-';
+
+      const reasonTd = document.createElement('td');
+      reasonTd.style.padding = '10px';
+      reasonTd.style.whiteSpace = 'pre-wrap';
+      reasonTd.textContent = request.reason || '-';
+
+      const statusTd = document.createElement('td');
+      statusTd.style.padding = '10px';
+      statusTd.style.color = statusColor;
+      statusTd.style.fontWeight = 'bold';
+      statusTd.textContent = request.status || 'Pending';
+
+      const actionTd = document.createElement('td');
+      actionTd.style.padding = '10px';
+
+      if (request.status === 'Pending') {
+        const acceptButton = document.createElement('button');
+
+        acceptButton.type = 'button';
+        acceptButton.textContent = '✓ Accept';
+
+        acceptButton.style.cssText = `
+                    padding:7px 10px;
+                    margin:2px;
+                    background:#27ae60;
+                    color:#fff;
+                    border:0;
+                    border-radius:5px;
+                    cursor:pointer;
+                    font-weight:bold;
+                `;
+
+        acceptButton.addEventListener(
+          'click',
+          function () {
+            acceptHawalkOtherRequestFromUI(request.id);
+          }
+        );
+
+        const declineButton = document.createElement('button');
+
+        declineButton.type = 'button';
+        declineButton.textContent = '✕ Decline';
+
+        declineButton.style.cssText = `
+                    padding:7px 10px;
+                    margin:2px;
+                    background:#c0392b;
+                    color:#fff;
+                    border:0;
+                    border-radius:5px;
+                    cursor:pointer;
+                    font-weight:bold;
+                `;
+
+        declineButton.addEventListener(
+          'click',
+          function () {
+            declineHawalkOtherRequestFromUI(request.id);
+          }
+        );
+
+        actionTd.appendChild(acceptButton);
+        actionTd.appendChild(declineButton);
+
+      } else {
+        actionTd.textContent = '-';
+      }
+
+      [
+        dateTd,
+        workerTd,
+        typeTd,
+        nameTd,
+        detailsTd,
+        reasonTd,
+        statusTd,
+        actionTd
+      ].forEach(function (td) {
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    });
+
+  } catch (error) {
+    console.error(
+      'TUX POS — Could not render Other Requests:',
+      error
+    );
+
+    tbody.innerHTML = `
+            <tr>
+                <td colspan="8" style="padding:20px;text-align:center;color:#e74c3c;">
+                    Could not load Other Requests.
+                    Check the browser console for details.
+                </td>
+            </tr>
+        `;
+  }
+}
+
+
+/* =========================================================
+   ADMIN ACCEPT OTHER REQUEST
+   Status only — no expense or stock insertion.
+   ========================================================= */
+
+async function acceptHawalkOtherRequestFromUI(requestId) {
+  if (
+    typeof getActiveRole === 'function' &&
+    !['admin', 'tuxadmin'].includes(getActiveRole())
+  ) {
+    alert('Only Admin or Tux Admin can accept this request.');
+    return;
+  }
+
+  const confirmed = confirm(
+    'Accept this Other Request?\n\n' +
+    'This will only change its status to Accepted.\n\n' +
+    'No expense or stock item will be created automatically.'
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    await acceptHawalkOtherRequest(requestId);
+
+    alert(
+      'Request accepted.\n\n' +
+      'Its status has been updated. ' +
+      'Add the expense or stock item manually if required.'
+    );
+
+    await renderHawalkOtherRequestsUI();
+
+  } catch (error) {
+    console.error(
+      'TUX POS — Accept Other Request failed:',
+      error
+    );
+
+    alert(
+      'Could not accept the request.\n\n' +
+      (error.message || 'Unknown error.')
+    );
+  }
+}
+
+
+/* =========================================================
+   ADMIN DECLINE OTHER REQUEST
+   Status only — no expense or stock insertion.
+   ========================================================= */
+
+async function declineHawalkOtherRequestFromUI(requestId) {
+  if (
+    typeof getActiveRole === 'function' &&
+    !['admin', 'tuxadmin'].includes(getActiveRole())
+  ) {
+    alert('Only Admin or Tux Admin can decline this request.');
+    return;
+  }
+
+  const confirmed = confirm(
+    'Decline this Other Request?\n\n' +
+    'Its status will change to Declined.\n' +
+    'Stock and expenses will remain unchanged.'
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    await declineHawalkOtherRequest(requestId);
+
+    alert('Other Request declined.');
+
+    await renderHawalkOtherRequestsUI();
+
+  } catch (error) {
+    console.error(
+      'TUX POS — Decline Other Request failed:',
+      error
+    );
+
+    alert(
+      'Could not decline the request.\n\n' +
+      (error.message || 'Unknown error.')
+    );
+  }
+}
+
+
+/* =========================================================
+   RENDER OTHER REQUESTS BY ROLE
+   ========================================================= */
+
+
+/* =========================================================
+   RENDER OTHER REQUESTS BY ROLE
+   ========================================================= */
+
+
+/* =========================================================
+   RENDER OTHER REQUESTS BY ROLE
+   ========================================================= */
+
+async function renderHawalkOtherRequestsUI() {
+  const role =
+    typeof getActiveRole === 'function'
+      ? String(getActiveRole()).trim().toLowerCase()
+      : '';
+
+  const workerSection = document.getElementById(
+    'hawalkOtherRequestSection'
+  );
+
+  if (role === 'worker') {
+    ensureHawalkOtherWorkerForm();
+
+    try {
+      await loadHawalkOtherRequestsFromSupabase();
+
+      renderHawalkOtherWorkerHistory(
+        window.hawalkOtherRequests
+      );
+    } catch (error) {
+      console.error(
+        'TUX POS — Could not load worker Other Requests:',
+        error
+      );
+    }
+
+    return;
+  }
+
+  if (workerSection) {
+    workerSection.style.display = 'none';
+  }
+
+  if (role === 'admin' || role === 'tuxadmin') {
+    ensureHawalkOtherAdminContainer();
+
+    await renderHawalkOtherAdminRequests();
+  }
+}
+
+
+
+
+
+
+
+/* =========================================================
+   OTHER REQUESTS REALTIME REFRESH
+   ========================================================= */
+
+window.addEventListener(
+  'tux-hawalk-other-updated',
+  function () {
+    const hawalkView = document.getElementById(
+      'hawalk-view'
+    );
+
+    if (
+      hawalkView &&
+      hawalkView.classList.contains('active')
+    ) {
+      renderHawalkOtherRequestsUI();
+    }
   }
 );

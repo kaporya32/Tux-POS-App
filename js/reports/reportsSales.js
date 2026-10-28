@@ -1,3 +1,4 @@
+
 /* =========================================================
    TUX POS — REPORT SALES
    Sales Report
@@ -8,768 +9,633 @@
    SALES REPORT
    ========================================================= */
 
+
+
+
+/* =========================================================
+   SALES REPORT — REPORTS PAGE
+   TUX POS
+   - Preserves current financial calculations
+   - Preserves Admin Reports
+   - Preserves Gard and Gam3ya reports
+   - Displays orders from the active shift only
+   ========================================================= */
+
 function renderSalesReport() {
 
-  renderGardReport();
+    /* =====================================================
+       INITIALIZE REPORT COMPONENTS
+       ===================================================== */
 
-  ensureMonthlyFinance();
+    ensureAdminReportFinance();
 
+    startAdminReportFinanceRealtime();
 
-  /* =======================================================
-     SOURCE DATA
-     ======================================================= */
+    renderAdminReports();
 
-  const salesData =
-    (
-      typeof reportSales !==
-      'undefined' &&
-      Array.isArray(reportSales)
-    )
-      ? reportSales
-      : [];
+    renderGardReport();
 
 
-  const expensesData =
-    (
-      typeof reportExpenses !==
-      'undefined' &&
-      Array.isArray(reportExpenses)
-    )
-      ? reportExpenses
-      : [];
+    /* =====================================================
+       CURRENT SHIFT FINANCIAL TOTALS
+       ===================================================== */
+
+    let totalCash = 0;
+
+    let totalInsta = 0;
+
+    let totalVisa = 0;
+
+    let totalDisc = 0;
+
+    let totalSales = 0;
 
 
-  let dailySales =
-    [];
+    const currentShiftSales =
+        Array.isArray(completedSales)
+            ? completedSales.filter(function (order) {
+                return order.status === 'done';
+            })
+            : [];
 
 
-  let dailyExpenses =
-    [];
+    const totalOrders =
+        currentShiftSales.length;
 
 
-  /* =======================================================
-     IMPORTANT
-     
-     Daily report values are ONLY allowed when there is
-     an ACTIVE shift.
+    currentShiftSales.forEach(function (order) {
 
-     This prevents old shift data from remaining visible
-     after End Shift.
-     ======================================================= */
+        totalCash +=
+            Number(order.cashPaid || 0);
 
-  const hasActiveShift =
-    !!(
-      currentShift &&
-      currentShift.active === true &&
-      currentShift.supabaseId
+        totalInsta +=
+            Number(order.instaPaid || 0);
+
+        totalVisa +=
+            Number(order.visaPaid || 0);
+
+        totalDisc +=
+            Number(order.discount || 0);
+
+
+        /*
+         * Net Sales = Cash + InstaPay only.
+         */
+
+        totalSales +=
+            Number(order.cashPaid || 0) +
+            Number(order.instaPaid || 0);
+
+    });
+
+
+    /* =====================================================
+       CURRENT SHIFT EXPENSES
+       ===================================================== */
+
+    let totalExpenses = 0;
+
+    if (Array.isArray(expensesList)) {
+
+        expensesList.forEach(function (expense) {
+
+            totalExpenses +=
+                Number(expense.cost || 0);
+
+        });
+
+    }
+
+
+    /* =====================================================
+       MONTHLY FINANCE
+       ===================================================== */
+
+    ensureMonthlyFinance();
+
+
+    const netProfit =
+        Number(monthlyFinance.bank || 0) -
+        Number(monthlyFinance.overallExpenses || 0);
+
+
+    /* =====================================================
+       DAILY HURRY APP
+       Visa + Discount
+       ===================================================== */
+
+    const dailyHurryEl =
+        document.getElementById('repDailyHurry');
+
+    if (dailyHurryEl) {
+
+        dailyHurryEl.innerText =
+            (
+                totalVisa +
+                totalDisc
+            ).toFixed(2) + ' LE';
+
+    }
+
+
+    /* =====================================================
+       MONTHLY HURRY APP
+       ===================================================== */
+
+    const hurryEl =
+        document.getElementById('repHurry');
+
+    if (hurryEl) {
+
+        hurryEl.innerText =
+            Number(
+                monthlyFinance.hurryApp || 0
+            ).toFixed(2) + ' LE';
+
+    }
+
+
+    /* =====================================================
+       GAM3YA REPORT
+       ===================================================== */
+
+    renderGamiyaReport();
+
+
+    /* =====================================================
+       UPDATE REPORT FIELDS SAFELY
+       ===================================================== */
+
+    function setReportValue(elementId, value) {
+
+        const element =
+            document.getElementById(elementId);
+
+        if (element) {
+            element.innerText = value;
+        }
+
+    }
+
+
+    setReportValue(
+        'repTotalCash',
+        totalCash.toFixed(2) + ' LE'
     );
 
 
-  if (
-    hasActiveShift
-  ) {
+    setReportValue(
+        'repTotalInsta',
+        totalInsta.toFixed(2) + ' LE'
+    );
 
-    if (
-      typeof getReportSalesForCurrentShift ===
-      'function'
-    ) {
 
-      dailySales =
-        getReportSalesForCurrentShift()
-          .filter(
-            function (ord) {
+    setReportValue(
+        'repTotalVisa',
+        totalVisa.toFixed(2) + ' LE'
+    );
 
-              return (
-                ord.status ===
-                'done'
-              );
 
-            }
-          );
+    setReportValue(
+        'repTotalDisc',
+        totalDisc.toFixed(2) + ' LE'
+    );
+
+
+    setReportValue(
+        'repTotalSales',
+        totalSales.toFixed(2) + ' LE'
+    );
+
+
+    setReportValue(
+        'repBank',
+        Number(
+            monthlyFinance.bank || 0
+        ).toFixed(2) + ' LE'
+    );
+
+
+    setReportValue(
+        'repDailyExpenses',
+        totalExpenses.toFixed(2) + ' LE'
+    );
+
+
+    setReportValue(
+        'repTotalExpenses',
+        Number(
+            monthlyFinance.overallExpenses || 0
+        ).toFixed(2) + ' LE'
+    );
+
+
+    setReportValue(
+        'repOverallOrders',
+        Number(
+            monthlyFinance.overallOrders || 0
+        )
+    );
+
+
+    setReportValue(
+        'repNetProfit',
+        netProfit.toFixed(2) + ' LE'
+    );
+
+
+    const netProfitElement =
+        document.getElementById('repNetProfit');
+
+    if (netProfitElement) {
+
+        netProfitElement.style.color =
+            netProfit >= 0
+                ? '#2ecc71'
+                : '#e74c3c';
 
     }
 
-    else {
 
-      dailySales =
-        salesData.filter(
-          function (ord) {
+    setReportValue(
+        'repTotalOrders',
+        totalOrders
+    );
 
-            return (
-              ord.shiftId ===
-              currentShift.supabaseId &&
-              ord.status ===
-              'done'
-            );
 
-          }
-        );
+    /* =====================================================
+       ORDER DETAILS CONTAINER
+       ===================================================== */
 
+    const listContainer =
+        document.getElementById('salesListContainer');
+
+    if (!listContainer) {
+        return;
     }
 
 
-    if (
-      typeof getReportExpensesForCurrentShift ===
-      'function'
-    ) {
+    /* =====================================================
+       CHECK THE ACTIVE SHIFT
+       ===================================================== */
 
-      dailyExpenses =
-        getReportExpensesForCurrentShift();
+    const activeShiftId =
+        currentShift &&
+        currentShift.active === true &&
+        currentShift.supabaseId
+            ? String(currentShift.supabaseId)
+            : null;
 
-    }
-
-    else {
-
-      dailyExpenses =
-        expensesData.filter(
-          function (expense) {
-
-            return (
-              expense.shiftId ===
-              currentShift.supabaseId
-            );
-
-          }
-        );
-
-    }
-
-  }
-
-  else {
 
     /*
-     * NO ACTIVE SHIFT
+     * If there is no active shift, don't show old orders
+     * under "Order details for current session".
      *
-     * This is the important part for End Shift.
-     *
-     * Historical report data remains in reportSales and
-     * reportExpenses, but Daily Report values become zero.
+     * Historical orders remain available through
+     * the saved Shift History reports.
      */
 
-    dailySales =
-      [];
+    if (!activeShiftId) {
 
-    dailyExpenses =
-      [];
+        listContainer.innerHTML = `
+            <div style="
+                color:#666;
+                text-align:center;
+                margin-top:20px;
+                padding:12px;
+            ">
+                No active shift.<br>
+                Start a shift to view its orders.
+            </div>
+        `;
 
-  }
-
-
-  /* =======================================================
-     DAILY CALCULATIONS
-     ======================================================= */
-
-  let dailyCash =
-    0;
-
-
-  let dailyInsta =
-    0;
-
-
-  let dailyVisa =
-    0;
-
-
-  let dailyDisc =
-    0;
-
-
-  let dailySalesTotal =
-    0;
-
-
-  dailySales.forEach(
-    function (ord) {
-
-      dailyCash +=
-        Number(
-          ord.cashPaid ||
-          0
-        );
-
-
-      dailyInsta +=
-        Number(
-          ord.instaPaid ||
-          0
-        );
-
-
-      dailyVisa +=
-        Number(
-          ord.visaPaid ||
-          0
-        );
-
-
-      dailyDisc +=
-        Number(
-          ord.discount ||
-          0
-        );
-
-
-      dailySalesTotal +=
-        Number(
-          ord.cashPaid ||
-          0
-        ) +
-        Number(
-          ord.instaPaid ||
-          0
-        );
-
+        return;
     }
-  );
 
 
-  const dailyOrders =
-    dailySales.length;
+    /* =====================================================
+       FILTER SUPABASE ORDERS BY ACTIVE SHIFT
+       ===================================================== */
 
+    const historicalSales =
+        Array.isArray(reportSales)
+            ? reportSales
+            : [];
 
-  const dailyExpensesTotal =
-    dailyExpenses.reduce(
-      function (
-        total,
-        expense
-      ) {
 
-        return (
-          total +
-          Number(
-            expense.cost ||
-            0
-          )
-        );
+    const matchingReportSales =
+        historicalSales.filter(function (order) {
 
-      },
-      0
-    );
+            const orderShiftId =
+                order.shiftId ??
+                order.shift_id ??
+                null;
 
+            return (
+                orderShiftId !== null &&
+                String(orderShiftId) === activeShiftId
+            );
 
-  const dailyHurryApp =
-    dailyVisa +
-    dailyDisc;
+        });
 
 
-  /* =======================================================
-     OVERALL VALUES
-     
-     These values come from report_finance in Supabase.
-     They are NOT recalculated from current orders here.
-     ======================================================= */
+    /* =====================================================
+       FALLBACK TO LOCAL ORDERS
+       ONLY IF THEY HAVE THE ACTIVE SHIFT ID
+       ===================================================== */
 
-  const overallSales =
-    Number(
-      monthlyFinance.bank ||
-      0
-    );
+    const localSales =
+        Array.isArray(completedSales)
+            ? completedSales
+            : [];
 
 
-  const overallExpenses =
-    Number(
-      monthlyFinance.overallExpenses ||
-      0
-    );
+    const matchingLocalSales =
+        localSales.filter(function (order) {
 
+            const orderShiftId =
+                order.shiftId ??
+                order.shift_id ??
+                null;
 
-  const overallOrders =
-    Math.trunc(
-      Number(
-        monthlyFinance.overallOrders ||
-        0
-      )
-    );
+            return (
+                orderShiftId !== null &&
+                String(orderShiftId) === activeShiftId
+            );
 
+        });
 
-  const hurryApp =
-    Number(
-      monthlyFinance.hurryApp ||
-      0
-    );
 
+    /*
+     * Prefer Supabase report data because it includes
+     * historical order details and item information.
+     *
+     * Use local orders only if no matching Supabase
+     * orders are available for this active shift.
+     */
 
-  const bank =
-    overallSales;
+    const sessionSales =
+        matchingReportSales.length > 0
+            ? matchingReportSales
+            : matchingLocalSales;
 
 
-  const netProfit =
-    bank -
-    overallExpenses;
+    /* =====================================================
+       NO ORDERS FOR THIS SHIFT
+       ===================================================== */
 
+    if (sessionSales.length === 0) {
 
-  /* =======================================================
-     DAILY HURRY APP
-     ======================================================= */
+        listContainer.innerHTML = `
+            <div style="
+                color:#666;
+                text-align:center;
+                margin-top:20px;
+                padding:12px;
+            ">
+                No orders recorded for this shift.
+            </div>
+        `;
 
-  const dailyHurryEl =
-    document.getElementById(
-      'repDailyHurry'
-    );
+        return;
+    }
 
 
-  if (dailyHurryEl) {
+    /* =====================================================
+       SORT ORDERS BY CREATION TIME
+       NEWEST FIRST
+       ===================================================== */
 
-    dailyHurryEl.innerText =
-      dailyHurryApp.toFixed(2) +
-      ' LE';
+    const sortedSales =
+        [...sessionSales].sort(function (a, b) {
 
-  }
+            const dateA =
+                a.createdAt
+                    ? new Date(a.createdAt).getTime()
+                    : 0;
 
+            const dateB =
+                b.createdAt
+                    ? new Date(b.createdAt).getTime()
+                    : 0;
 
-  /* =======================================================
-     OVERALL HURRY APP
-     ======================================================= */
+            return dateB - dateA;
 
-  const hurryEl =
-    document.getElementById(
-      'repHurry'
-    );
+        });
 
 
-  if (hurryEl) {
+    /* =====================================================
+       BUILD ORDER DETAILS
+       ===================================================== */
 
-    hurryEl.innerText =
-      hurryApp.toFixed(2) +
-      ' LE';
+    let html = '';
 
-  }
 
+    sortedSales.forEach(function (order) {
 
-  /* =======================================================
-     GAM3YA
-     ======================================================= */
+        const items =
+            Array.isArray(order.items)
+                ? order.items
+                : [];
 
-  renderGamiyaReport();
-
-
-  /* =======================================================
-     DAILY CASH
-     ======================================================= */
-
-  const cashEl =
-    document.getElementById(
-      'repTotalCash'
-    );
-
-
-  if (cashEl) {
-
-    cashEl.innerText =
-      dailyCash.toFixed(2) +
-      ' LE';
-
-  }
-
-
-  /* =======================================================
-     DAILY INSTAPAY
-     ======================================================= */
-
-  const instaEl =
-    document.getElementById(
-      'repTotalInsta'
-    );
-
-
-  if (instaEl) {
-
-    instaEl.innerText =
-      dailyInsta.toFixed(2) +
-      ' LE';
-
-  }
-
-
-  /* =======================================================
-     DAILY VISA
-     ======================================================= */
-
-  const visaEl =
-    document.getElementById(
-      'repTotalVisa'
-    );
-
-
-  if (visaEl) {
-
-    visaEl.innerText =
-      dailyVisa.toFixed(2) +
-      ' LE';
-
-  }
-
-
-  /* =======================================================
-     DAILY DISCOUNT
-     ======================================================= */
-
-  const discEl =
-    document.getElementById(
-      'repTotalDisc'
-    );
-
-
-  if (discEl) {
-
-    discEl.innerText =
-      dailyDisc.toFixed(2) +
-      ' LE';
-
-  }
-
-
-  /* =======================================================
-     DAILY SALES
-     ======================================================= */
-
-  const salesEl =
-    document.getElementById(
-      'repTotalSales'
-    );
-
-
-  if (salesEl) {
-
-    salesEl.innerText =
-      dailySalesTotal.toFixed(2) +
-      ' LE';
-
-  }
-
-
-  /* =======================================================
-     BANK — SUPABASE FINANCE
-     ======================================================= */
-
-  const bankEl =
-    document.getElementById(
-      'repBank'
-    );
-
-
-  if (bankEl) {
-
-    bankEl.innerText =
-      bank.toFixed(2) +
-      ' LE';
-
-  }
-
-
-  /* =======================================================
-     DAILY EXPENSES
-     ======================================================= */
-
-  const dailyExpensesEl =
-    document.getElementById(
-      'repDailyExpenses'
-    );
-
-
-  if (dailyExpensesEl) {
-
-    dailyExpensesEl.innerText =
-      dailyExpensesTotal.toFixed(2) +
-      ' LE';
-
-  }
-
-
-  /* =======================================================
-     OVERALL EXPENSES
-     ======================================================= */
-
-  const totalExpensesEl =
-    document.getElementById(
-      'repTotalExpenses'
-    );
-
-
-  if (totalExpensesEl) {
-
-    totalExpensesEl.innerText =
-      overallExpenses.toFixed(2) +
-      ' LE';
-
-  }
-
-
-  /* =======================================================
-     OVERALL ORDERS
-     ======================================================= */
-
-  const overallOrdersEl =
-    document.getElementById(
-      'repOverallOrders'
-    );
-
-
-  if (overallOrdersEl) {
-
-    overallOrdersEl.innerText =
-      overallOrders;
-
-  }
-
-
-  /* =======================================================
-     PROFIT
-     ======================================================= */
-
-  const netProfitEl =
-    document.getElementById(
-      'repNetProfit'
-    );
-
-
-  if (netProfitEl) {
-
-    netProfitEl.innerText =
-      netProfit.toFixed(2) +
-      ' LE';
-
-
-    netProfitEl.style.color =
-      netProfit >= 0
-        ? '#2ecc71'
-        : '#e74c3c';
-
-  }
-
-
-  /* =======================================================
-     DAILY ORDERS
-     ======================================================= */
-
-  const totalOrdersEl =
-    document.getElementById(
-      'repTotalOrders'
-    );
-
-
-  if (totalOrdersEl) {
-
-    totalOrdersEl.innerText =
-      dailyOrders;
-
-  }
-
-
-  /* =======================================================
-     SALES LIST
-     
-     IMPORTANT:
-     The Sales List remains historical.
-     We do NOT clear reportSales because old sales are
-     needed for Shift History / historical reports.
-     ======================================================= */
-
-  const listContainer =
-    document.getElementById(
-      'salesListContainer'
-    );
-
-
-  if (!listContainer) {
-    return;
-  }
-
-
-  if (
-    salesData.length === 0
-  ) {
-
-    listContainer.innerHTML = `
-
-      <div
-        style="
-          color:#666;
-          text-align:center;
-          margin-top:20px;
-        "
-      >
-        No sales recorded yet
-      </div>
-
-    `;
-
-    return;
-
-  }
-
-
-  let html =
-    '';
-
-
-  [...salesData]
-    .sort(
-      function (a, b) {
-
-        return (
-          new Date(
-            b.createdAt ||
-            0
-          ) -
-          new Date(
-            a.createdAt ||
-            0
-          )
-        );
-
-      }
-    )
-    .forEach(
-      function (ord) {
 
         const itemsNames =
-          (
-            ord.items ||
-            []
-          )
-          .map(
-            function (i) {
+            items.map(function (item) {
 
-              return (
-                i.name +
-                ' (x' +
-                i.qty +
-                ')'
-              );
+                const itemName =
+                    String(item.name || 'Item');
 
-            }
-          )
-          .join(', ');
+
+                const quantity =
+                    Number(
+                        item.qty ??
+                        item.quantity ??
+                        0
+                    );
+
+
+                return (
+                    itemName +
+                    ' (x' +
+                    quantity +
+                    ')'
+                );
+
+            }).join(', ');
+
+
+        const status =
+            String(
+                order.status || 'preparing'
+            ).toLowerCase();
 
 
         const statusColor =
-          ord.status ===
-          'cancelled'
-            ? '#e74c3c'
-            : (
-                ord.status ===
-                'done'
-                  ? '#2ecc71'
-                  : '#f1c40f'
-              );
+            status === 'cancelled'
+                ? '#e74c3c'
+                : (
+                    status === 'done' ||
+                    status === 'completed'
+                        ? '#2ecc71'
+                        : '#f1c40f'
+                );
 
 
         const statusLabel =
-          ord.status ===
-          'cancelled'
-            ? 'Cancelled'
-            : (
-                ord.status ===
-                'done'
-                  ? 'Completed'
-                  : 'Preparing'
-              );
+            status === 'cancelled'
+                ? 'Cancelled'
+                : (
+                    status === 'done' ||
+                    status === 'completed'
+                        ? 'Completed'
+                        : 'Preparing'
+                );
+
+
+        const orderNumber =
+            order.orderNum ??
+            order.orderNumber ??
+            '-';
+
+
+        const orderTime =
+            order.time ||
+            (
+                order.createdAt
+                    ? new Date(
+                        order.createdAt
+                    ).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    })
+                    : '-'
+            );
+
+
+        const staffName =
+            String(
+                order.staffName || '-'
+            );
+
+
+        const orderTotal =
+            Number(
+                order.total || 0
+            );
+
+
+        const orderNote =
+            String(
+                order.note || ''
+            ).trim();
 
 
         html += `
+            <div style="
+                background:#1c1c2b;
+                padding:8px 10px;
+                border-radius:5px;
+                display:flex;
+                justify-content:space-between;
+                align-items:flex-start;
+                gap:12px;
+                font-size:11px;
+                margin-bottom:5px;
+            ">
 
-          <div
-            style="
-              background:#1c1c2b;
-              padding:6px 10px;
-              border-radius:4px;
-              display:flex;
-              justify-content:space-between;
-              align-items:center;
-              font-size:11px;
-              margin-bottom:4px;
-            "
-          >
+                <div style="
+                    flex:1;
+                    min-width:0;
+                ">
 
-            <div>
+                    <strong>
+                        Order #${orderNumber}
+                    </strong>
 
-              <strong>
-                Order #${ord.orderNum}
-              </strong>
+                    <span style="
+                        color:#888;
+                    ">
+                        (${orderTime})
+                    </span>
 
-              <span style="color:#888;">
-                (${ord.time})
-              </span>
+                    <br>
 
-              <br>
+                    <span style="
+                        color:#aaa;
+                        font-size:10px;
+                        overflow-wrap:anywhere;
+                    ">
+                        ${itemsNames || 'No items'}
+                    </span>
 
-              <span
-                style="
-                  color:#aaa;
-                  font-size:10px;
-                "
-              >
-                ${itemsNames || '-'}
-              </span>
+                    <br>
 
-              <br>
+                    <span style="
+                        color:#888;
+                        font-size:9px;
+                    ">
+                        Staff: ${staffName}
+                    </span>
 
-              <span
-                style="
-                  color:#888;
-                  font-size:9px;
-                "
-              >
-                Staff:
-                ${ord.staffName || '-'}
-              </span>
+                    ${
+                        orderNote
+                            ? `
+                                <br>
+                                <span style="
+                                    color:#f1c40f;
+                                    font-size:10px;
+                                    overflow-wrap:anywhere;
+                                ">
+                                    Note: ${orderNote}
+                                </span>
+                            `
+                            : ''
+                    }
 
-              <br>
+                </div>
 
-              <span
-                style="
-                  color:#666;
-                  font-size:8.5px;
-                "
-              >
-                ${ord.date || '-'}
-              </span>
+
+                <div style="
+                    text-align:right;
+                    flex-shrink:0;
+                ">
+
+                    <span style="
+                        color:#f1c40f;
+                        font-weight:bold;
+                        white-space:nowrap;
+                    ">
+                        ${orderTotal.toFixed(2)} LE
+                    </span>
+
+                    <br>
+
+                    <span style="
+                        font-size:9.5px;
+                        color:${statusColor};
+                    ">
+                        ${statusLabel}
+                    </span>
+
+                </div>
 
             </div>
-
-            <div
-              style="
-                text-align:right;
-              "
-            >
-
-              <span
-                style="
-                  color:#f1c40f;
-                  font-weight:bold;
-                "
-              >
-                ${Number(
-                  ord.total ||
-                  0
-                ).toFixed(2)} LE
-              </span>
-
-              <br>
-
-              <span
-                style="
-                  font-size:9.5px;
-                  color:${statusColor};
-                "
-              >
-                ${statusLabel}
-              </span>
-
-            </div>
-
-          </div>
-
         `;
 
-      }
-    );
+    });
 
 
-  listContainer.innerHTML =
-    html;
+    /* =====================================================
+       DISPLAY ACTIVE SHIFT ORDERS
+       ===================================================== */
+
+    listContainer.innerHTML = html;
 
 }
+
+
+
+
+
+
+

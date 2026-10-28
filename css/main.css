@@ -3176,7 +3176,7 @@ select:focus-visible {
 }
 
 #cashier-view .cart-box {
-  min-height: 70px;
+  min-height: 150px;
   flex: 1 1 auto;
   overflow-y: auto;
 }
@@ -3280,4 +3280,597 @@ select:focus-visible {
     width: 100%;
   }
 
+}
+
+/* =========================================================
+   TUX POS — GLOBAL ALERT MODAL
+   ========================================================= */
+
+.tux-alert-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 20px;
+
+  background: rgba(0, 0, 0, 0.76);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.tux-alert-overlay.tux-alert-visible {
+  opacity: 1;
+}
+
+.tux-alert-box {
+  position: relative;
+
+  width: 100%;
+  max-width: 430px;
+  max-height: 85vh;
+  overflow-y: auto;
+
+  padding: 30px 28px 24px;
+
+  background: linear-gradient(
+    145deg,
+    #202020 0%,
+    #151515 100%
+  );
+
+  border: 1px solid rgba(241, 196, 15, 0.3);
+  border-radius: 18px;
+
+  box-shadow:
+    0 25px 80px rgba(0, 0, 0, 0.65),
+    0 0 30px rgba(241, 196, 15, 0.07);
+
+  text-align: center;
+
+  transform: translateY(15px) scale(0.96);
+  transition: transform 0.22s ease;
+}
+
+.tux-alert-visible .tux-alert-box {
+  transform: translateY(0) scale(1);
+}
+
+/* Title */
+
+.tux-alert-box h3 {
+  margin: 15px 0 10px;
+
+  color: #f1c40f;
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+/* Message */
+
+.tux-alert-message {
+  margin: 0 auto;
+
+  color: #d5d5d5;
+  font-size: 14px;
+  line-height: 1.8;
+
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* Icon */
+
+.tux-alert-icon {
+  width: 64px;
+  height: 64px;
+
+  margin: 0 auto;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  font-size: 30px;
+  font-weight: 900;
+
+  border: 2px solid currentColor;
+}
+
+/* Information */
+
+.tux-alert-info {
+  color: #f1c40f;
+  background: rgba(241, 196, 15, 0.1);
+}
+
+/* Success */
+
+.tux-alert-success {
+  color: #2ecc71;
+  background: rgba(46, 204, 113, 0.1);
+}
+
+/* Error */
+
+.tux-alert-error {
+  color: #ff5b5b;
+  background: rgba(255, 91, 91, 0.1);
+}
+
+/* Warning */
+
+.tux-alert-warning {
+  color: #ffae42;
+  background: rgba(255, 174, 66, 0.1);
+}
+
+/* Confirmation */
+
+.tux-alert-confirm {
+  color: #f1c40f;
+  background: rgba(241, 196, 15, 0.1);
+}
+
+/* Buttons */
+
+.tux-alert-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+
+  margin-top: 27px;
+}
+
+.tux-alert-btn {
+  min-width: 105px;
+  min-height: 42px;
+
+  padding: 11px 20px;
+
+  border: 1px solid transparent;
+  border-radius: 9px;
+
+  font-size: 13px;
+  font-weight: 800;
+
+  cursor: pointer;
+
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.tux-alert-btn:hover {
+  transform: translateY(-2px);
+}
+
+.tux-alert-btn:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+}
+
+/* Primary */
+
+.tux-alert-primary {
+  color: #151515;
+  background: #f1c40f;
+}
+
+.tux-alert-primary:hover {
+  background: #ffda36;
+}
+
+/* Cancel */
+
+.tux-alert-cancel {
+  color: #dedede;
+  background: #292929;
+  border-color: #454545;
+}
+
+.tux-alert-cancel:hover {
+  background: #383838;
+  border-color: #666666;
+}
+
+/* Mobile */
+
+@media (max-width: 480px) {
+  .tux-alert-overlay {
+    padding: 16px;
+  }
+
+  .tux-alert-box {
+    padding: 25px 20px 20px;
+    border-radius: 15px;
+  }
+
+  .tux-alert-box h3 {
+    font-size: 19px;
+  }
+
+  .tux-alert-message {
+    font-size: 13px;
+  }
+
+  .tux-alert-actions {
+    gap: 9px;
+  }
+
+  .tux-alert-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 11px 12px;
+  }
+}
+
+/* =========================================================
+   TUX POS — LIGHT MODE
+   SCOPE: NAVBAR + CASHIER ONLY
+   ========================================================= */
+
+/* ---------------------------------------------------------
+   NAVBAR VARIABLES
+   --------------------------------------------------------- */
+
+.top-nav[data-theme="light"] {
+  --tux-panel: #ffffff;
+  --tux-panel-2: #f8fafc;
+
+  --tux-card: #f1f5f9;
+  --tux-card-hover: #e2e8f0;
+
+  --tux-border: #d5dce5;
+  --tux-border-light: #c2ccd8;
+  --tux-border-soft: #e2e8f0;
+
+  --tux-text: #17202b;
+  --tux-text-soft: #465365;
+
+  --tux-muted: #586577;
+  --tux-muted-dark: #64748b;
+
+  --tux-shadow: rgba(15, 23, 42, 0.08);
+  --tux-shadow-heavy: rgba(15, 23, 42, 0.16);
+
+  background: var(--tux-panel);
+  border-color: var(--tux-border);
+  color: var(--tux-text);
+}
+
+.top-nav[data-theme="light"] .nav-brand {
+  color: var(--tux-text);
+}
+
+.top-nav[data-theme="light"] .nav-btn:not([style*="background"]) {
+  background: #f1f5f9;
+  color: #465365;
+  border-color: #d5dce5;
+}
+
+.top-nav[data-theme="light"] .nav-btn:not([style*="background"]):hover:not(.active) {
+  background: #e2e8f0;
+  color: #17202b;
+  border-color: #c2ccd8;
+}
+
+.top-nav[data-theme="light"] .nav-btn.active {
+  background: var(--tux-red);
+  color: #ffffff;
+  border-color: var(--tux-red);
+}
+
+.top-nav[data-theme="light"] .nav-clock,
+.top-nav[data-theme="light"] .shift-status {
+  color: #586577;
+}
+
+.top-nav[data-theme="light"] .staff-login-box {
+  background: #f8fafc;
+  border-color: #d5dce5;
+}
+
+.top-nav[data-theme="light"] .nav-btn:disabled {
+  opacity: 0.4;
+}
+
+/* Preserve the online indicator's green color. */
+.top-nav[data-theme="light"] #navOnlineUsersList {
+  color: #334155 !important;
+}
+
+
+/* ---------------------------------------------------------
+   CASHIER VARIABLES
+   --------------------------------------------------------- */
+
+#cashier-view[data-theme="light"] {
+  --tux-bg: #f4f6f9;
+  --tux-bg-deep: #ffffff;
+
+  --tux-panel: #ffffff;
+  --tux-panel-2: #f8fafc;
+
+  --tux-card: #f8fafc;
+  --tux-card-hover: #edf2f7;
+
+  --tux-input: #ffffff;
+
+  --tux-border: #d5dce5;
+  --tux-border-light: #c2ccd8;
+  --tux-border-soft: #e2e8f0;
+
+  --tux-text: #17202b;
+  --tux-text-soft: #465365;
+
+  --tux-muted: #586577;
+  --tux-muted-dark: #64748b;
+
+  --tux-shadow: rgba(15, 23, 42, 0.07);
+  --tux-shadow-heavy: rgba(15, 23, 42, 0.14);
+
+  background: #f4f6f9;
+  color: #17202b;
+}
+
+/* Main Cashier panels */
+
+#cashier-view[data-theme="light"] .menu-panel,
+#cashier-view[data-theme="light"] .extras-panel,
+#cashier-view[data-theme="light"] .order-panel {
+  background: #ffffff;
+  border-color: #d5dce5;
+  box-shadow: 0 3px 12px rgba(15, 23, 42, 0.06);
+}
+
+/* Keep category headers and their configured colors intact. */
+
+#cashier-view[data-theme="light"] .item-card {
+  color: #17202b;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.04);
+}
+
+/* Light backgrounds for default product cards.
+   Category accent colors and borders remain in place. */
+
+#cashier-view[data-theme="light"] .item-card.category-sandwiches {
+  background: linear-gradient(
+    145deg,
+    rgba(229, 72, 77, 0.09),
+    #ffffff 75%
+  );
+}
+
+#cashier-view[data-theme="light"] .item-card.category-combos {
+  background: linear-gradient(
+    145deg,
+    rgba(228, 119, 46, 0.10),
+    #ffffff 75%
+  );
+}
+
+#cashier-view[data-theme="light"] .item-card.category-fries {
+  background: linear-gradient(
+    145deg,
+    rgba(229, 185, 63, 0.12),
+    #ffffff 75%
+  );
+}
+
+#cashier-view[data-theme="light"] .item-card.category-hawawshi {
+  background: linear-gradient(
+    145deg,
+    rgba(169, 104, 66, 0.10),
+    #ffffff 75%
+  );
+}
+
+#cashier-view[data-theme="light"] .item-card.category-drinks {
+  background: linear-gradient(
+    145deg,
+    rgba(59, 155, 216, 0.10),
+    #ffffff 75%
+  );
+}
+
+#cashier-view[data-theme="light"] .item-card.category-extras {
+  background: linear-gradient(
+    145deg,
+    rgba(155, 108, 255, 0.10),
+    #ffffff 75%
+  );
+}
+
+#cashier-view[data-theme="light"] .item-card.category-zalabya {
+  background: linear-gradient(
+    145deg,
+    rgba(216, 102, 168, 0.10),
+    #ffffff 75%
+  );
+}
+
+#cashier-view[data-theme="light"] .item-card:hover {
+  box-shadow: 0 3px 9px rgba(15, 23, 42, 0.09);
+}
+
+/* Product names use the light theme text color.
+   Saved product-name colors can still take precedence if
+   applied directly by your category-color JavaScript. */
+
+#cashier-view[data-theme="light"] .item-card .item-name {
+  color: var(--tux-text);
+}
+
+/* Extras heading */
+
+#cashier-view[data-theme="light"] .extras-panel > .section-title {
+  background: #edf2f7 !important;
+  color: #17202b !important;
+  border-left-color: #e5484d !important;
+  box-shadow: none;
+}
+
+/* Current order heading */
+
+#cashier-view[data-theme="light"] .order-header {
+  border-bottom-color: #d5dce5;
+}
+
+#cashier-view[data-theme="light"] .order-header h2 {
+  color: #17202b;
+}
+
+#cashier-view[data-theme="light"] .order-header span {
+  color: #8a5a00 !important;
+}
+
+/* Cart */
+
+#cashier-view[data-theme="light"] .cart-box,
+#cashier-view[data-theme="light"] .total-box {
+  background: #f8fafc;
+  border-color: #d5dce5;
+  color: #17202b;
+}
+
+#cashier-view[data-theme="light"] .cart-table-header {
+  color: #586577;
+  border-bottom-color: #d5dce5;
+}
+
+#cashier-view[data-theme="light"] .cart-item {
+  border-bottom-color: #e2e8f0;
+}
+
+#cashier-view[data-theme="light"] .cart-item-total {
+  color: #8a5a00;
+}
+
+#cashier-view[data-theme="light"] .qty-controls {
+  background: #edf2f7;
+  border-color: #d5dce5;
+}
+
+#cashier-view[data-theme="light"] .qty-btn {
+  color: #17202b;
+}
+
+#cashier-view[data-theme="light"] .qty-btn:hover {
+  background: #dce5ef;
+}
+
+#cashier-view[data-theme="light"] .qty-btn:active {
+  background: #cbd5e1;
+}
+
+/* Payment inputs */
+
+#cashier-view[data-theme="light"] .payments label {
+  color: #465365;
+}
+
+#cashier-view[data-theme="light"] .payments input,
+#cashier-view[data-theme="light"] .whatsapp-input {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #17202b;
+}
+
+#cashier-view[data-theme="light"] .payments input::placeholder,
+#cashier-view[data-theme="light"] .whatsapp-input::placeholder {
+  color: #7b8797;
+}
+
+#cashier-view[data-theme="light"] .payments input:focus,
+#cashier-view[data-theme="light"] .whatsapp-input:focus {
+  border-color: var(--tux-red);
+}
+
+/* General Cashier text */
+
+#cashier-view[data-theme="light"] .cart-box,
+#cashier-view[data-theme="light"] .total-box,
+#cashier-view[data-theme="light"] .payments,
+#cashier-view[data-theme="light"] .whatsapp-row,
+#cashier-view[data-theme="light"] .bottom-tools {
+  color: #17202b;
+}
+
+/* Clear All button */
+
+#cashier-view[data-theme="light"] .tool-btn,
+#cashier-view[data-theme="light"] .tool-btn.clear {
+  background: #edf2f7;
+  border-color: #cbd5e1;
+  color: #17202b;
+}
+
+#cashier-view[data-theme="light"] .tool-btn:hover {
+  background: #e2e8f0;
+  border-color: #b8c5d5;
+}
+
+/* Order note display */
+
+#cashier-view[data-theme="light"] #currentOrderNoteDisplay {
+  background: #fff8df !important;
+  border-left-color: #d4a017 !important;
+  color: #765600 !important;
+}
+
+/* Keep the note action button recognizable. */
+
+#cashier-view[data-theme="light"] #writeOrderNoteBtn {
+  background: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
+  color: #17202b !important;
+}
+
+/* Low-stock warning remains a warning, but readable. */
+
+#cashier-view[data-theme="light"] #cashierLowStockAlert {
+  background: #fff1f0 !important;
+  border-color: #e74c3c !important;
+  color: #7f1d1d !important;
+}
+
+#cashier-view[data-theme="light"] #cashierLowStockAlertItems {
+  color: #7f1d1d;
+}
+
+/* Diff display */
+
+#cashier-view[data-theme="light"] #diffText {
+  color: #465365;
+}
+
+/* Smooth theme transitions without affecting layout. */
+
+.top-nav,
+#cashier-view,
+#cashier-view .menu-panel,
+#cashier-view .extras-panel,
+#cashier-view .order-panel,
+#cashier-view .cart-box,
+#cashier-view .total-box,
+#cashier-view .item-card,
+#cashier-view .payments input,
+#cashier-view .whatsapp-input,
+#cashier-view .tool-btn {
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
 }
