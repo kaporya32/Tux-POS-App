@@ -939,6 +939,7 @@ function clearOrder() {
 
 
 
+
 async function sendOrder() {
 
     // Admin and Tux Admin are allowed to send orders.
@@ -1041,23 +1042,18 @@ async function sendOrder() {
         return;
     }
 
-    // Final order total includes delivery.
     const total =
         subtotal - disc + deliveryFee;
 
-    // Actual payments received for the food.
     const paid =
         cash + insta + visa;
 
-    // Payment validation excludes delivery.
     const expectedFoodPayment =
         subtotal - disc;
 
     const diff =
         expectedFoodPayment - paid;
 
-    // Require food payment to match exactly,
-    // allowing a small rounding tolerance.
     if (Math.abs(diff) > 0.01) {
 
         alert(
@@ -1123,7 +1119,25 @@ async function sendOrder() {
     }
 
     /* =====================================================
-       STEP 3 — PREPARE ORDER
+       STEP 3 — RESTORE ORDER NUMBER
+       ===================================================== */
+
+    const counterRestored =
+        await restoreOrderCounterForCurrentShift();
+
+    if (!counterRestored) {
+
+        alert(
+            'Could not verify the next order number from Supabase. ' +
+            'The order was not sent. Please try again.'
+        );
+
+        return;
+
+    }
+
+    /* =====================================================
+       STEP 4 — PREPARE ORDER
        ===================================================== */
 
     const currentWorker =
@@ -1151,10 +1165,7 @@ async function sendOrder() {
 
         items: [...currentOrder],
 
-        // Food subtotal before discount.
         subtotal: subtotal,
-
-        // Final order total includes delivery.
         total: total,
 
         cashPaid: cash,
@@ -1191,7 +1202,7 @@ async function sendOrder() {
     };
 
     /* =====================================================
-       STEP 4 — SAVE TO SUPABASE
+       STEP 5 — SAVE TO SUPABASE
        ===================================================== */
 
     let savedOrder;
@@ -1215,15 +1226,19 @@ async function sendOrder() {
         );
 
         return;
+
     }
 
     if (!savedOrder) {
+
         orderCounter--;
+
         return;
+
     }
 
     /* =====================================================
-       STEP 5 — UPDATE LOCAL ORDER LISTS
+       STEP 6 — UPDATE LOCAL ORDER LISTS
        ===================================================== */
 
     orderData.supabaseId = savedOrder.id;
@@ -1241,12 +1256,11 @@ async function sendOrder() {
     );
 
     /* =====================================================
-       STEP 6 — CLEAR CURRENT ORDER AND NOTE
+       STEP 7 — CLEAR CURRENT ORDER AND NOTE
        ===================================================== */
 
     clearOrder();
 
-    // Clear every payment field after successful order.
     [
         'cashPaid',
         'instaPaid',
@@ -1283,6 +1297,8 @@ async function sendOrder() {
     }
 
 }
+
+
 
 
 

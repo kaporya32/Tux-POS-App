@@ -600,6 +600,157 @@ const orderPayload = {
 
 
 
+
+
+async function restoreOrderCounterForCurrentShift() {
+    try {
+        if (
+            !currentShift ||
+            !currentShift.supabaseId ||
+            !supabaseClient
+        ) {
+            console.warn(
+                'TUX POS — Cannot restore order counter: no active shift.'
+            );
+            return false;
+        }
+
+        const {
+            data,
+            error
+        } = await supabaseClient
+            .from('orders')
+            .select('order_number')
+            .eq('shift_id', currentShift.supabaseId);
+
+        if (error) {
+            console.error(
+                'TUX POS — Failed to restore order counter:',
+                error
+            );
+            return false;
+        }
+
+        const highestOrderNumber = (data || []).reduce(
+            function (highest, order) {
+                const number = Number(order.order_number);
+
+                return Number.isFinite(number)
+                    ? Math.max(highest, number)
+                    : highest;
+            },
+            0
+        );
+
+        orderCounter = highestOrderNumber + 1;
+
+        console.log(
+            'TUX POS — Next order number:',
+            orderCounter
+        );
+
+        return true;
+
+    } catch (error) {
+        console.error(
+            'TUX POS — Restoring order counter failed:',
+            error
+        );
+
+        return false;
+    }
+}
+
+
+
+/* =========================================================
+   TUX POS — RESTORE ORDER COUNTER FOR CURRENT SHIFT
+   ========================================================= */
+
+async function restoreOrderCounterForCurrentShift() {
+
+    try {
+
+        if (
+            !currentShift ||
+            !currentShift.supabaseId
+        ) {
+
+            console.warn(
+                'TUX POS — Cannot restore order counter: no active shift.'
+            );
+
+            return false;
+
+        }
+
+        const {
+            data,
+            error
+        } = await supabaseClient
+            .from('orders')
+            .select('order_number')
+            .eq(
+                'shift_id',
+                currentShift.supabaseId
+            );
+
+        if (error) {
+
+            console.error(
+                'TUX POS — Failed to restore order counter:',
+                error
+            );
+
+            return false;
+
+        }
+
+        const highestOrderNumber = (data || [])
+            .reduce(function (highest, order) {
+
+                const number =
+                    Number(order.order_number);
+
+                if (
+                    Number.isFinite(number) &&
+                    number > highest
+                ) {
+
+                    return number;
+
+                }
+
+                return highest;
+
+            }, 0);
+
+        orderCounter = highestOrderNumber + 1;
+
+        console.log(
+            'TUX POS — Order counter restored. Next order:',
+            orderCounter
+        );
+
+        return true;
+
+    } catch (error) {
+
+        console.error(
+            'TUX POS — Restoring order counter failed:',
+            error
+        );
+
+        return false;
+
+    }
+
+}
+
+
+
+
+
 /* =========================================================
    TUX POS — CURRENT ORDER NOTE
    ========================================================= */

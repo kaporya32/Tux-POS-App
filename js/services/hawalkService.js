@@ -80,6 +80,160 @@ function logHawalkSupabaseError(action, error) {
    ========================================================= */
 
 
+
+
+/* =========================================================
+   CREATE HAWALK REQUEST
+   Worker submits stock requests.
+   Stock is NOT deducted here.
+   ========================================================= */
+
+async function createHawalkRequest(items) {
+
+    /* =========================================
+       1. PERMISSION CHECK
+       ========================================= */
+
+    if (!hawalkCanCreateRequest()) {
+        throw new Error(
+            'Only a Worker can create a Hawalk request.'
+        );
+    }
+
+
+    /* =========================================
+       2. CHECK WORKER
+       ========================================= */
+
+    const worker = getCurrentHawalkWorker();
+
+    if (!worker) {
+        throw new Error(
+            'No active worker is logged in.'
+        );
+    }
+
+
+    /* =========================================
+       3. VALIDATE ITEMS
+       ========================================= */
+
+    if (!Array.isArray(items) || items.length === 0) {
+        throw new Error(
+            'Please select at least one stock item.'
+        );
+    }
+
+    const requestItems = items.map(item => {
+
+        const stockItemId =
+            String(item.stockItemId || '').trim();
+
+        const itemName =
+            String(item.itemName || '').trim();
+
+        const unit =
+            String(item.unit || 'piece').trim();
+
+        const quantity = Number(item.quantity);
+
+        if (!stockItemId || !itemName) {
+            throw new Error(
+                'Invalid stock item information.'
+            );
+        }
+
+        if (
+            !Number.isFinite(quantity) ||
+            quantity <= 0
+        ) {
+            throw new Error(
+                `Invalid quantity for ${itemName}.`
+            );
+        }
+
+        return {
+            stockItemId,
+            itemName,
+            unit,
+            quantity
+        };
+
+    });
+
+
+    /* =========================================
+       4. SAVE REQUEST TO SUPABASE
+       Stock is NOT deducted.
+       ========================================= */
+
+    const {
+        data,
+        error
+    } = await supabaseClient
+        .from('hawalk_requests')
+        .insert({
+            worker_id: String(worker.id),
+
+            worker_name: String(
+                worker.name || 'Unknown Worker'
+            ),
+
+            items: requestItems,
+
+            status: 'Pending'
+        })
+        .select()
+        .single();
+
+
+    if (error) {
+
+        logHawalkSupabaseError(
+            'Failed to create Hawalk request',
+            error
+        );
+
+        throw error;
+    }
+
+
+    /* =========================================
+       5. UPDATE LOCAL REQUEST LIST
+       ========================================= */
+
+    if (!Array.isArray(window.hawalkRequests)) {
+        window.hawalkRequests = [];
+    }
+
+    window.hawalkRequests.unshift(data);
+
+    hawalkRequests = window.hawalkRequests;
+
+
+    /* =========================================
+       6. NOTIFY THE APP
+       ========================================= */
+
+    window.dispatchEvent(
+        new CustomEvent('tux-hawalk-updated')
+    );
+
+
+    console.log(
+        'TUX POS — Hawalk request created:',
+        data
+    );
+
+    return data;
+}
+
+
+
+
+
+
+
 async function mergeSavedShiftSnapshotsIntoHistory() {
   try {
     if (
