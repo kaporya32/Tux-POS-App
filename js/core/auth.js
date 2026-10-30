@@ -983,13 +983,6 @@ async function registerTuxOnlinePresence({
   displayName,
   deviceLabel = 'Unknown browser'
 }) {
-  if (
-    typeof supabaseClient === 'undefined' ||
-    !supabaseClient
-  ) {
-    throw new Error('Supabase client is unavailable.');
-  }
-
   const normalizedRole = String(role || '').trim().toLowerCase();
   const normalizedAccountId = String(accountId || '').trim();
   const normalizedDisplayName = String(displayName || '').trim();
@@ -1002,8 +995,55 @@ async function registerTuxOnlinePresence({
     throw new Error('Account ID and display name are required.');
   }
 
-  // Register the session in the existing database.
-  const { data, error } = await supabaseClient.rpc(
+  /*
+   * TUX Admin must use the client that authenticated it.
+   * Workers and regular Admins keep using supabaseClient.
+   */
+  const authClient =
+    normalizedRole === 'tuxadmin'
+      ? tuxAdminAuthClient
+      : supabaseClient;
+
+  if (!authClient) {
+    throw new Error('Supabase authentication client is unavailable.');
+  }
+
+  /*
+   * Confirm that the correct client has an authenticated session.
+   */
+  if (normalizedRole === 'tuxadmin') {
+    const {
+      data: sessionData,
+      error: sessionError
+    } = await authClient.auth.getSession();
+
+    if (sessionError) {
+      throw sessionError;
+    }
+
+    if (!sessionData?.session?.user?.id) {
+      throw new Error(
+        'TUX Admin Supabase session is missing.'
+      );
+    }
+
+    if (
+      String(sessionData.session.user.id) !==
+      normalizedAccountId
+    ) {
+      throw new Error(
+        'TUX Admin authenticated account does not match the login account.'
+      );
+    }
+  }
+
+  /*
+   * Register online presence using the correct authenticated client.
+   */
+  const {
+    data,
+    error
+  } = await authClient.rpc(
     'register_tux_online_session',
     {
       p_role: normalizedRole,
@@ -1019,6 +1059,7 @@ async function registerTuxOnlinePresence({
       'TUX POS — Online presence registration failed:',
       error
     );
+
     throw error;
   }
 
@@ -1029,7 +1070,12 @@ async function registerTuxOnlinePresence({
     );
   }
 
-  const tokenKey = normalizedRole + ':' + normalizedAccountId;
+  /*
+   * Save the session token.
+   */
+  const tokenKey =
+    normalizedRole + ':' + normalizedAccountId;
+
   const tokens = getTuxOnlinePresenceTokens();
 
   tokens[tokenKey] = {
@@ -1041,9 +1087,12 @@ async function registerTuxOnlinePresence({
 
   if (!saveTuxOnlinePresenceTokens(tokens)) {
     try {
-      await supabaseClient.rpc('logout_tux_online_session', {
-        p_session_token: data.session_token
-      });
+      await authClient.rpc(
+        'logout_tux_online_session',
+        {
+          p_session_token: data.session_token
+        }
+      );
     } catch (cleanupError) {
       console.error(
         'TUX POS — Presence cleanup failed:',
@@ -1057,8 +1106,7 @@ async function registerTuxOnlinePresence({
   }
 
   /*
-   * Update live Realtime Presence if the channel is already connected.
-   * If it isn't connected yet, the watcher must synchronize after subscribing.
+   * Synchronize Realtime Presence.
    */
   if (
     window.tuxOnlinePresenceRealtimeChannel &&
@@ -1067,7 +1115,9 @@ async function registerTuxOnlinePresence({
     await syncTuxOnlinePresenceTracking();
   }
 
-  // Preserve attendance displays.
+  /*
+   * Preserve attendance displays.
+   */
   if (typeof renderTodayWorkers === 'function') {
     renderTodayWorkers();
   }
@@ -1078,7 +1128,6 @@ async function registerTuxOnlinePresence({
 
   return data.session_token;
 }
-
 /* =========================================================
    SEND HEARTBEATS FOR THIS BROWSER'S SESSIONS
    ========================================================= */
@@ -1738,7 +1787,7 @@ async function staffLogin(password) {
 
         if (session?.token) {
           try {
-            await supabaseClient.rpc(
+            await tuxAdminAuthClient.rpc(
               'logout_tux_online_session',
               {
                 p_session_token: session.token
