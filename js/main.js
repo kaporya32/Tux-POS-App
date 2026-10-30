@@ -395,9 +395,7 @@ async function initializeApp() {
       'TUX POS — Loading workers from Supabase...'
     );
 
-
     await loadWorkersFromSupabase();
-
 
     console.log(
       'TUX POS — Workers loaded:',
@@ -413,7 +411,6 @@ async function initializeApp() {
       'TUX POS — Starting workers realtime...'
     );
 
-
     startWorkersRealtime();
 
 
@@ -425,9 +422,7 @@ async function initializeApp() {
       'TUX POS — Loading attendance from Supabase...'
     );
 
-
     await loadAllAttendance();
-
 
     console.log(
       'TUX POS — Attendance loaded.'
@@ -442,33 +437,31 @@ async function initializeApp() {
       'TUX POS — Starting attendance realtime...'
     );
 
-
     startAttendanceRealtime();
 
 
-/* =====================================================
-   LOGIN SESSION
-   ===================================================== */
+    /* =====================================================
+       LOGIN SESSION
+       ===================================================== */
 
-console.log(
-  'TUX POS — Restoring login session...'
-);
+    console.log(
+      'TUX POS — Restoring login session...'
+    );
 
-if (
-  typeof window.restoreLoginSession !== 'function'
-) {
-  throw new Error(
-    'TUX POS — restoreLoginSession is unavailable. ' +
-    'Check that auth.js loads before main.js.'
-  );
-}
+    if (
+      typeof window.restoreLoginSession !== 'function'
+    ) {
+      throw new Error(
+        'TUX POS — restoreLoginSession is unavailable. ' +
+        'Check that auth.js loads before main.js.'
+      );
+    }
 
-await window.restoreLoginSession();
+    await window.restoreLoginSession();
 
-console.log(
-  'TUX POS — Login session restored.'
-);
-
+    console.log(
+      'TUX POS — Login session restored.'
+    );
 
 
     /* =====================================================
@@ -479,15 +472,12 @@ console.log(
       'TUX POS — Loading menu from Supabase...'
     );
 
-
     await loadMenu();
-
 
     console.log(
       'TUX POS — Menu loaded:',
       menuItems
     );
-
 
     console.log(
       'TUX POS — Extras loaded:',
@@ -503,9 +493,7 @@ console.log(
       'TUX POS — Loading category colors from Supabase...'
     );
 
-
     await loadCategoryColors();
-
 
     console.log(
       'TUX POS — Category colors loaded.'
@@ -520,7 +508,6 @@ console.log(
       'TUX POS — Starting category colors realtime...'
     );
 
-
     initializeCategoryColorsRealtime();
 
 
@@ -532,9 +519,7 @@ console.log(
       'TUX POS — Loading shift data from Supabase...'
     );
 
-
     await loadSavedShiftData();
-
 
     console.log(
       'TUX POS — Shift data loaded.'
@@ -549,7 +534,6 @@ console.log(
       'TUX POS — Starting shifts realtime...'
     );
 
-
     startShiftsRealtime();
 
 
@@ -561,9 +545,16 @@ console.log(
       'TUX POS — Loading stock from Supabase...'
     );
 
+    if (
+      typeof window.loadStockFromSupabase !== 'function'
+    ) {
+      throw new Error(
+        'TUX POS — loadStockFromSupabase is unavailable. ' +
+        'Check js/services/stockService.js.'
+      );
+    }
 
-    await loadStockFromSupabase();
-
+    await window.loadStockFromSupabase();
 
     console.log(
       'TUX POS — Stock loaded:',
@@ -579,9 +570,16 @@ console.log(
       'TUX POS — Loading recipes from Supabase...'
     );
 
+    if (
+      typeof window.loadRecipesFromSupabase !== 'function'
+    ) {
+      throw new Error(
+        'TUX POS — loadRecipesFromSupabase is unavailable. ' +
+        'Check js/services/stockService.js.'
+      );
+    }
 
-    await loadRecipesFromSupabase();
-
+    await window.loadRecipesFromSupabase();
 
     console.log(
       'TUX POS — Recipes loaded:',
@@ -597,7 +595,6 @@ console.log(
       'TUX POS — Starting stock realtime...'
     );
 
-
     startStockRealtime();
 
 
@@ -609,9 +606,7 @@ console.log(
       'TUX POS — Loading Hawalk requests from Supabase...'
     );
 
-
     await loadHawalkRequestsFromSupabase();
-
 
     console.log(
       'TUX POS — Hawalk requests loaded:',
@@ -627,7 +622,6 @@ console.log(
       'TUX POS — Starting Hawalk realtime...'
     );
 
-
     startHawalkRealtime();
 
 
@@ -639,9 +633,7 @@ console.log(
       'TUX POS — Loading expenses from Supabase...'
     );
 
-
     await loadExpensesFromSupabase();
-
 
     console.log(
       'TUX POS — Expenses loaded:',
@@ -657,7 +649,6 @@ console.log(
       'TUX POS — Starting expenses realtime...'
     );
 
-
     startExpensesRealtime();
 
 
@@ -669,9 +660,7 @@ console.log(
       'TUX POS — Loading historical reports from Supabase...'
     );
 
-
     await loadReportsFromSupabase();
-
 
     console.log(
       'TUX POS — Historical reports loaded.'
@@ -686,9 +675,7 @@ console.log(
       'TUX POS — Loading Gam3ya from Supabase...'
     );
 
-
     await loadGamiyaFromSupabase();
-
 
     console.log(
       'TUX POS — Gam3ya loaded:',
@@ -704,30 +691,34 @@ console.log(
       'TUX POS — Starting Gam3ya realtime...'
     );
 
-
     startGamiyaRealtime();
 
-/* =====================================================
-   KITCHEN ORDERS
-   ===================================================== */
 
-console.log(
-  'TUX POS — Loading Kitchen orders from Supabase...'
-);
+    /* =====================================================
+       KITCHEN ORDERS
+       ===================================================== */
 
-if (typeof window.loadKitchenOrdersFromSupabase !== 'function') {
-  throw new Error(
-    'loadKitchenOrdersFromSupabase is unavailable. ' +
-    'Check js/kitchen/kitchen.js for syntax errors.'
-  );
-}
+    console.log(
+      'TUX POS — Loading Kitchen orders from Supabase...'
+    );
 
-await window.loadKitchenOrdersFromSupabase();
+    if (
+      typeof window.loadKitchenOrdersFromSupabase !== 'function'
+    ) {
+      throw new Error(
+        'TUX POS — loadKitchenOrdersFromSupabase is unavailable. ' +
+        'Check js/kitchen/kitchen.js.'
+      );
+    }
 
-console.log(
-  'TUX POS — Kitchen orders loaded:',
-  kitchenOrders
-);
+    await window.loadKitchenOrdersFromSupabase();
+
+    console.log(
+      'TUX POS — Kitchen orders loaded:',
+      kitchenOrders
+    );
+
+
     /* =====================================================
        START ORDERS REALTIME
        ===================================================== */
@@ -735,7 +726,6 @@ console.log(
     console.log(
       'TUX POS — Starting orders realtime...'
     );
-
 
     startOrdersRealtime();
 
@@ -814,16 +804,11 @@ console.log(
             'workers-view'
           );
 
-
         if (
           workersView &&
-          workersView.classList.contains(
-            'active'
-          )
+          workersView.classList.contains('active')
         ) {
-
           renderWorkersView();
-
         }
 
 
@@ -832,18 +817,12 @@ console.log(
             'hawalk-view'
           );
 
-
         if (
           hawalkView &&
-          hawalkView.classList.contains(
-            'active'
-          )
+          hawalkView.classList.contains('active')
         ) {
-
           renderHawalkView();
-
         }
-
 
         updateStaffUI();
 
@@ -852,22 +831,25 @@ console.log(
     );
 
 
+    /* =====================================================
+       SUCCESS
+       ===================================================== */
+
     console.log(
       'TUX POS — Application started successfully.'
     );
 
-  }
 
-  catch (error) {
+  } catch (error) {
 
     console.error(
       'TUX POS — Application startup failed:',
       error
     );
 
-
     alert(
-      'TUX POS could not load the application data. Please refresh the page and try again.'
+      'TUX POS could not load the application data. ' +
+      'Please refresh the page and try again.'
     );
 
   }

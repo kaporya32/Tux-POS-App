@@ -1511,6 +1511,7 @@ function findMenuItemByName(
    ========================================================= */
 
 
+
 async function deductStockForOrder(ord) {
 
   /* =======================================================
@@ -1547,6 +1548,7 @@ async function deductStockForOrder(ord) {
       'Could not deduct stock.\n\n' +
       'Supabase is not initialized.'
     );
+
     return false;
   }
 
@@ -1566,6 +1568,7 @@ async function deductStockForOrder(ord) {
       'Could not deduct stock.\n\n' +
       'The order has no valid reference ID.'
     );
+
     return false;
   }
 
@@ -1574,6 +1577,7 @@ async function deductStockForOrder(ord) {
       'TUX POS — Order contains no items.',
       ord
     );
+
     return true;
   }
 
@@ -1611,27 +1615,30 @@ async function deductStockForOrder(ord) {
     typeof stockInventory !== 'object' ||
     Array.isArray(stockInventory)
   ) {
-    console.error(
-      'TUX POS — stockInventory is unavailable or invalid.'
+
+    console.warn(
+      'TUX POS — Stock inventory unavailable. Order will proceed without stock deduction.',
+      {
+        referenceId,
+        orderLabel
+      }
     );
 
-    alert(
-      'Could not deduct stock.\n\n' +
-      'The stock inventory has not been loaded.'
-    );
-    return false;
+    return true;
   }
 
+
   if (Object.keys(stockInventory).length === 0) {
-    console.error(
-      'TUX POS — Stock inventory is empty.'
+
+    console.info(
+      'TUX POS — Stock inventory is empty. Order will proceed without stock deduction.',
+      {
+        referenceId,
+        orderLabel
+      }
     );
 
-    alert(
-      'Could not deduct stock.\n\n' +
-      'No stock items are currently loaded.'
-    );
-    return false;
+    return true;
   }
 
 
@@ -1645,15 +1652,16 @@ async function deductStockForOrder(ord) {
     typeof recipes !== 'object' ||
     Array.isArray(recipes)
   ) {
-    console.error(
-      'TUX POS — Recipe object is unavailable.'
+
+    console.warn(
+      'TUX POS — Recipes unavailable. Order will proceed without stock deduction.',
+      {
+        referenceId,
+        orderLabel
+      }
     );
 
-    alert(
-      'Could not deduct stock.\n\n' +
-      'The product recipes have not been loaded.'
-    );
-    return false;
+    return true;
   }
 
 
@@ -1671,6 +1679,7 @@ async function deductStockForOrder(ord) {
         'TUX POS — Invalid order item.',
         orderItem
       );
+
       return false;
     }
 
@@ -1693,6 +1702,7 @@ async function deductStockForOrder(ord) {
         'Could not deduct stock.\n\n' +
         'An order item has an invalid quantity.'
       );
+
       return false;
     }
 
@@ -1705,51 +1715,73 @@ async function deductStockForOrder(ord) {
       ''
     ).trim();
 
+    const productName =
+      orderItem.product_name ||
+      orderItem.productName ||
+      orderItem.name ||
+      productId ||
+      'Unknown product';
+
+
+    /* PRODUCTS WITHOUT IDs ARE SKIPPED */
+
     if (!productId) {
-      console.error(
-        'TUX POS — Order item has no product ID.',
-        orderItem
-      );
-
-      alert(
-        'Could not deduct stock.\n\n' +
-        'An order item is missing its product ID.'
-      );
-      return false;
-    }
-
-    const recipe = recipes[productId];
-
-    /*
-      Products without recipes are skipped.
-    */
-
-    if (recipe === undefined || recipe === null) {
 
       skippedProducts.push({
-        productId,
-        productName:
-          orderItem.product_name ||
-          orderItem.productName ||
-          orderItem.name ||
-          productId
+        productId: '',
+        productName
       });
 
       console.warn(
-        'TUX POS — Stock deduction skipped: no recipe configured.',
+        'TUX POS — Product skipped: missing product ID.',
+        orderItem
+      );
+
+      continue;
+    }
+
+
+    const recipe = recipes[productId];
+
+
+    /* =====================================================
+       NO RECIPE = NO STOCK DEDUCTION
+       ===================================================== */
+
+    if (
+      recipe === undefined ||
+      recipe === null ||
+      (
+        typeof recipe === 'object' &&
+        !Array.isArray(recipe) &&
+        Object.keys(recipe).length === 0
+      )
+    ) {
+
+      skippedProducts.push({
+        productId,
+        productName
+      });
+
+      console.info(
+        'TUX POS — Product skipped: no ingredients configured.',
         {
           productId,
-          orderItem
+          productName
         }
       );
 
       continue;
     }
 
+
+    /* VALIDATE RECIPE STRUCTURE */
+
     if (
       typeof recipe !== 'object' ||
       Array.isArray(recipe)
     ) {
+
       console.error(
         'TUX POS — Invalid recipe structure.',
         {
@@ -1760,30 +1792,18 @@ async function deductStockForOrder(ord) {
 
       alert(
         'Could not deduct stock.\n\n' +
-        'A configured product recipe is invalid.'
+        'The recipe for "' +
+        productName +
+        '" is invalid.'
       );
+
       return false;
     }
 
-    const ingredientEntries = Object.entries(recipe);
 
-    if (ingredientEntries.length === 0) {
-      console.error(
-        'TUX POS — Configured recipe contains no ingredients.',
-        {
-          productId,
-          recipe
-        }
-      );
+    /* PROCESS RECIPE INGREDIENTS */
 
-      alert(
-        'Could not deduct stock.\n\n' +
-        'A configured product recipe has no ingredients.'
-      );
-      return false;
-    }
-
-    for (const [stockItemId, rawQuantity] of ingredientEntries) {
+    for (const [stockItemId, rawQuantity] of Object.entries(recipe)) {
 
       const quantityPerProduct = Number(rawQuantity);
 
@@ -1791,6 +1811,7 @@ async function deductStockForOrder(ord) {
         !Number.isFinite(quantityPerProduct) ||
         quantityPerProduct <= 0
       ) {
+
         console.error(
           'TUX POS — Invalid recipe quantity.',
           {
@@ -1804,6 +1825,7 @@ async function deductStockForOrder(ord) {
           'Could not deduct stock.\n\n' +
           'A recipe contains an invalid ingredient quantity.'
         );
+
         return false;
       }
 
@@ -1820,46 +1842,13 @@ async function deductStockForOrder(ord) {
 
 
   /* =======================================================
-     6. SHOW EXISTING COLORED NOTIFICATION
-
-     Uses window.tuxAlert, which your application already
-     uses to display its custom notification design.
-     ======================================================= */
-
-//  if (skippedProducts.length > 0) {
-//   const productNames = skippedProducts
-//     .map(function (product) {
-//       return '• ' + (
-//         product.productName ||
-//         product.productId ||
-//         'Unknown product'
-//       );
-//     })
-//     .join('\n');
-
-//   const message =
-//     'Some products do not have configured recipes.\n\n' +
-//     'Stock deduction will be skipped for:\n\n' +
-//     productNames +
-//     '\n\nProducts with configured recipes will still deduct their ingredients from stock.';
-
-//   if (typeof window.tuxAlert === 'function') {
-//     window.tuxAlert(message, 'warning');
-//   } else {
-//     console.error(
-//       'TUX POS: The custom notification system is unavailable.'
-//     );
-//   }
-// }
-
-  /* =======================================================
-     7. HANDLE ORDERS WITHOUT CONFIGURED RECIPES
+     6. HANDLE ORDERS WITHOUT CONFIGURED RECIPES
      ======================================================= */
 
   if (deductions.size === 0) {
 
     console.info(
-      'TUX POS — No stock deduction required. No order products have configured recipes.',
+      'TUX POS — No stock deduction required. Order can proceed.',
       {
         referenceId,
         orderLabel,
@@ -1872,7 +1861,7 @@ async function deductStockForOrder(ord) {
 
 
   /* =======================================================
-     8. VALIDATE CALCULATED DEDUCTIONS
+     7. VALIDATE CALCULATED DEDUCTIONS
      ======================================================= */
 
   const deductionTasks = [];
@@ -1881,43 +1870,45 @@ async function deductStockForOrder(ord) {
 
     const stockItem = stockInventory[stockItemId];
 
+
+    /* MISSING STOCK ITEM = SKIP INGREDIENT */
+
     if (!stockItem) {
-      console.error(
-        'TUX POS — Recipe references a stock item that is not loaded.',
+
+      console.warn(
+        'TUX POS — Stock item unavailable. Skipping ingredient.',
         {
           stockItemId,
           quantity
         }
       );
 
-      alert(
-        'Could not deduct stock.\n\n' +
-        'A recipe references a stock item that is not loaded.\n\n' +
-        'Stock item ID: ' +
-        stockItemId
-      );
-      return false;
+      continue;
     }
+
+
+    /* INACTIVE STOCK ITEM = SKIP INGREDIENT */
 
     if (stockItem.active === false) {
-      console.error(
-        'TUX POS — Recipe references an inactive stock item.',
-        stockItem
+
+      console.warn(
+        'TUX POS — Stock item inactive. Skipping ingredient.',
+        {
+          stockItemId,
+          stockItemName: stockItem.name,
+          quantity
+        }
       );
 
-      alert(
-        'Could not deduct stock.\n\n' +
-        'The stock item "' +
-        String(stockItem.name || stockItemId) +
-        '" is inactive.'
-      );
-      return false;
+      continue;
     }
+
 
     if (
       !Number.isFinite(quantity) ||
       quantity <= 0
     ) {
+
       console.error(
         'TUX POS — Invalid calculated stock quantity.',
         {
@@ -1925,8 +1916,10 @@ async function deductStockForOrder(ord) {
           quantity
         }
       );
+
       return false;
     }
+
 
     deductionTasks.push({
       stockItemId,
@@ -1937,10 +1930,137 @@ async function deductStockForOrder(ord) {
 
 
   /* =======================================================
-     9. EXECUTE SUPABASE DEDUCTIONS
+     8. HANDLE NO AVAILABLE STOCK ITEMS
+     ======================================================= */
+
+  if (deductionTasks.length === 0) {
+
+    console.info(
+      'TUX POS — No available stock items to deduct. Order can proceed.',
+      {
+        referenceId,
+        orderLabel
+      }
+    );
+
+    return true;
+  }
+
+
+  /* =======================================================
+     9. SELECT AUTHENTICATED SUPABASE CLIENT
      ======================================================= */
 
   try {
+
+    const activeRole =
+      typeof getActiveRole === 'function'
+        ? getActiveRole()
+        : '';
+
+    const deductionClient =
+      activeRole === 'tuxadmin'
+        ? (
+            typeof tuxAdminAuthClient !== 'undefined'
+              ? tuxAdminAuthClient
+              : null
+          )
+        : supabaseClient;
+
+
+    if (!deductionClient) {
+
+      throw new Error(
+        'The Supabase authentication client is unavailable.'
+      );
+    }
+
+
+    /* =====================================================
+       10. CHECK AUTHENTICATION SESSION
+       ===================================================== */
+
+    const {
+      data: sessionData,
+      error: sessionError
+    } = await deductionClient.auth.getSession();
+
+    const session =
+      sessionData?.session || null;
+
+
+    console.log(
+      'TUX POS — STOCK AUTH DEBUG:',
+      {
+        activeRole,
+
+        selectedClient:
+          activeRole === 'tuxadmin'
+            ? 'tuxAdminAuthClient'
+            : 'supabaseClient',
+
+        hasSession:
+          !!session,
+
+        userId:
+          session?.user?.id || null,
+
+        accessTokenExists:
+          !!session?.access_token,
+
+        sessionError:
+          sessionError?.message || null
+      }
+    );
+
+
+    console.log(
+      'TUX POS — AUTH CLIENT DETAILS:',
+      {
+        activeRole,
+
+        clientUrl:
+          deductionClient.supabaseUrl || null,
+
+        clientHasAuth:
+          !!deductionClient.auth,
+
+        sessionUserId:
+          session?.user?.id || null
+      }
+    );
+
+
+    if (sessionError) {
+
+      throw new Error(
+        'Could not verify the authentication session: ' +
+        sessionError.message
+      );
+    }
+
+
+    if (!session || !session.access_token) {
+
+      console.error(
+        'TUX POS — Missing authenticated session.',
+        {
+          activeRole
+        }
+      );
+
+      alert(
+        'Could not deduct stock.\n\n' +
+        'Your Supabase session is missing or expired.'
+      );
+
+      return false;
+    }
+
+
+    /* =====================================================
+       11. EXECUTE SUPABASE DEDUCTIONS
+       ===================================================== */
 
     for (const task of deductionTasks) {
 
@@ -1950,10 +2070,11 @@ async function deductStockForOrder(ord) {
         stockItem
       } = task;
 
+
       const {
         data: deductionResult,
         error: deductionError
-      } = await supabaseClient.rpc(
+      } = await deductionClient.rpc(
         'deduct_stock_for_order',
         {
           p_stock_item_id: stockItemId,
@@ -1963,6 +2084,7 @@ async function deductStockForOrder(ord) {
           p_note: movementNote
         }
       );
+
 
       if (deductionError) {
 
@@ -1974,6 +2096,8 @@ async function deductStockForOrder(ord) {
             quantity,
             referenceId,
             movementType,
+            activeRole,
+            userId: session.user.id,
             error: deductionError
           }
         );
@@ -1987,6 +2111,7 @@ async function deductStockForOrder(ord) {
 
         return false;
       }
+
 
       if (
         !deductionResult ||
@@ -2011,6 +2136,9 @@ async function deductStockForOrder(ord) {
         return false;
       }
 
+
+      /* UPDATE LOCAL STOCK QUANTITY */
+
       const newQuantity = Number(
         deductionResult.current_quantity
       );
@@ -2019,19 +2147,27 @@ async function deductStockForOrder(ord) {
         stockItem.current = newQuantity;
       }
 
+
       console.log(
         'TUX POS — Stock deduction completed.',
         {
           stockItemId,
           stockItemName: stockItem.name,
-          requestedDeduction: quantity,
+
+          requestedDeduction:
+            quantity,
+
           actualDeduction:
             deductionResult.already_deducted === true
               ? 0
               : quantity,
-          remaining: stockItem.current,
+
+          remaining:
+            stockItem.current,
+
           referenceId,
           movementType,
+
           alreadyDeducted:
             deductionResult.already_deducted === true
         }
@@ -2040,7 +2176,7 @@ async function deductStockForOrder(ord) {
 
 
     /* =====================================================
-       10. REFRESH STOCK UI
+       12. REFRESH STOCK UI
        ===================================================== */
 
     if (typeof renderStock === 'function') {
@@ -2053,7 +2189,7 @@ async function deductStockForOrder(ord) {
 
 
     /* =====================================================
-       11. NOTIFY OTHER COMPONENTS
+       13. NOTIFY OTHER COMPONENTS
        ===================================================== */
 
     document.dispatchEvent(
@@ -2065,6 +2201,7 @@ async function deductStockForOrder(ord) {
             orderLabel,
             movementType,
             isGamiya,
+
             items: deductionTasks.map(function (task) {
               return {
                 stockItemId: task.stockItemId,
@@ -2072,6 +2209,7 @@ async function deductStockForOrder(ord) {
                 quantity: task.quantity
               };
             }),
+
             skippedProducts
           }
         }
@@ -2079,13 +2217,22 @@ async function deductStockForOrder(ord) {
     );
 
 
+    /* =====================================================
+       14. FINISH
+       ===================================================== */
+
     console.info(
       'TUX POS — Stock deduction processing completed.',
       {
         referenceId,
         orderLabel,
-        stockItemsProcessed: deductionTasks.length,
-        productsSkippedWithoutRecipes: skippedProducts.length,
+
+        stockItemsProcessed:
+          deductionTasks.length,
+
+        productsSkippedWithoutRecipes:
+          skippedProducts.length,
+
         skippedProducts
       }
     );
