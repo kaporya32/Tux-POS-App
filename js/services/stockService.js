@@ -1514,6 +1514,11 @@ function findMenuItemByName(
 
 async function deductStockForOrder(ord) {
 
+  console.log(
+    'TUX POS — STOCK DEDUCTION V2 FUNCTION RUNNING.'
+  );
+
+
   /* =======================================================
      1. VALIDATE ORDER
      ======================================================= */
@@ -1615,30 +1620,29 @@ async function deductStockForOrder(ord) {
     typeof stockInventory !== 'object' ||
     Array.isArray(stockInventory)
   ) {
-
-    console.warn(
-      'TUX POS — Stock inventory unavailable. Order will proceed without stock deduction.',
-      {
-        referenceId,
-        orderLabel
-      }
+    console.error(
+      'TUX POS — stockInventory is unavailable or invalid.'
     );
 
-    return true;
+    alert(
+      'Could not deduct stock.\n\n' +
+      'The stock inventory has not been loaded.'
+    );
+
+    return false;
   }
 
-
   if (Object.keys(stockInventory).length === 0) {
-
-    console.info(
-      'TUX POS — Stock inventory is empty. Order will proceed without stock deduction.',
-      {
-        referenceId,
-        orderLabel
-      }
+    console.error(
+      'TUX POS — Stock inventory is empty.'
     );
 
-    return true;
+    alert(
+      'Could not deduct stock.\n\n' +
+      'No stock items are currently loaded.'
+    );
+
+    return false;
   }
 
 
@@ -1652,16 +1656,16 @@ async function deductStockForOrder(ord) {
     typeof recipes !== 'object' ||
     Array.isArray(recipes)
   ) {
-
-    console.warn(
-      'TUX POS — Recipes unavailable. Order will proceed without stock deduction.',
-      {
-        referenceId,
-        orderLabel
-      }
+    console.error(
+      'TUX POS — Recipe object is unavailable.'
     );
 
-    return true;
+    alert(
+      'Could not deduct stock.\n\n' +
+      'The product recipes have not been loaded.'
+    );
+
+    return false;
   }
 
 
@@ -1715,56 +1719,37 @@ async function deductStockForOrder(ord) {
       ''
     ).trim();
 
+    if (!productId) {
+      console.error(
+        'TUX POS — Order item has no product ID.',
+        orderItem
+      );
+
+      alert(
+        'Could not deduct stock.\n\n' +
+        'An order item is missing its product ID.'
+      );
+
+      return false;
+    }
+
     const productName =
       orderItem.product_name ||
       orderItem.productName ||
       orderItem.name ||
-      productId ||
-      'Unknown product';
-
-
-    /* PRODUCTS WITHOUT IDs ARE SKIPPED */
-
-    if (!productId) {
-
-      skippedProducts.push({
-        productId: '',
-        productName
-      });
-
-      console.warn(
-        'TUX POS — Product skipped: missing product ID.',
-        orderItem
-      );
-
-      continue;
-    }
-
+      productId;
 
     const recipe = recipes[productId];
 
-
-    /* =====================================================
-       NO RECIPE = NO STOCK DEDUCTION
-       ===================================================== */
-
-    if (
-      recipe === undefined ||
-      recipe === null ||
-      (
-        typeof recipe === 'object' &&
-        !Array.isArray(recipe) &&
-        Object.keys(recipe).length === 0
-      )
-    ) {
+    if (recipe === undefined || recipe === null) {
 
       skippedProducts.push({
         productId,
         productName
       });
 
-      console.info(
-        'TUX POS — Product skipped: no ingredients configured.',
+      console.warn(
+        'TUX POS — Stock deduction skipped: no recipe configured.',
         {
           productId,
           productName
@@ -1774,14 +1759,10 @@ async function deductStockForOrder(ord) {
       continue;
     }
 
-
-    /* VALIDATE RECIPE STRUCTURE */
-
     if (
       typeof recipe !== 'object' ||
       Array.isArray(recipe)
     ) {
-
       console.error(
         'TUX POS — Invalid recipe structure.',
         {
@@ -1792,18 +1773,32 @@ async function deductStockForOrder(ord) {
 
       alert(
         'Could not deduct stock.\n\n' +
-        'The recipe for "' +
-        productName +
-        '" is invalid.'
+        'A configured product recipe is invalid.'
       );
 
       return false;
     }
 
+    const ingredientEntries = Object.entries(recipe);
 
-    /* PROCESS RECIPE INGREDIENTS */
+    if (ingredientEntries.length === 0) {
+      console.error(
+        'TUX POS — Configured recipe contains no ingredients.',
+        {
+          productId,
+          recipe
+        }
+      );
 
-    for (const [stockItemId, rawQuantity] of Object.entries(recipe)) {
+      alert(
+        'Could not deduct stock.\n\n' +
+        'A configured product recipe has no ingredients.'
+      );
+
+      return false;
+    }
+
+    for (const [stockItemId, rawQuantity] of ingredientEntries) {
 
       const quantityPerProduct = Number(rawQuantity);
 
@@ -1811,7 +1806,6 @@ async function deductStockForOrder(ord) {
         !Number.isFinite(quantityPerProduct) ||
         quantityPerProduct <= 0
       ) {
-
         console.error(
           'TUX POS — Invalid recipe quantity.',
           {
@@ -1848,7 +1842,7 @@ async function deductStockForOrder(ord) {
   if (deductions.size === 0) {
 
     console.info(
-      'TUX POS — No stock deduction required. Order can proceed.',
+      'TUX POS — No stock deduction required.',
       {
         referenceId,
         orderLabel,
@@ -1870,45 +1864,45 @@ async function deductStockForOrder(ord) {
 
     const stockItem = stockInventory[stockItemId];
 
-
-    /* MISSING STOCK ITEM = SKIP INGREDIENT */
-
     if (!stockItem) {
-
-      console.warn(
-        'TUX POS — Stock item unavailable. Skipping ingredient.',
+      console.error(
+        'TUX POS — Recipe references a stock item that is not loaded.',
         {
           stockItemId,
           quantity
         }
       );
 
-      continue;
+      alert(
+        'Could not deduct stock.\n\n' +
+        'A recipe references a stock item that is not loaded.\n\n' +
+        'Stock item ID: ' +
+        stockItemId
+      );
+
+      return false;
     }
-
-
-    /* INACTIVE STOCK ITEM = SKIP INGREDIENT */
 
     if (stockItem.active === false) {
-
-      console.warn(
-        'TUX POS — Stock item inactive. Skipping ingredient.',
-        {
-          stockItemId,
-          stockItemName: stockItem.name,
-          quantity
-        }
+      console.error(
+        'TUX POS — Recipe references an inactive stock item.',
+        stockItem
       );
 
-      continue;
-    }
+      alert(
+        'Could not deduct stock.\n\n' +
+        'The stock item "' +
+        String(stockItem.name || stockItemId) +
+        '" is inactive.'
+      );
 
+      return false;
+    }
 
     if (
       !Number.isFinite(quantity) ||
       quantity <= 0
     ) {
-
       console.error(
         'TUX POS — Invalid calculated stock quantity.',
         {
@@ -1920,7 +1914,6 @@ async function deductStockForOrder(ord) {
       return false;
     }
 
-
     deductionTasks.push({
       stockItemId,
       quantity,
@@ -1930,137 +1923,235 @@ async function deductStockForOrder(ord) {
 
 
   /* =======================================================
-     8. HANDLE NO AVAILABLE STOCK ITEMS
-     ======================================================= */
-
-  if (deductionTasks.length === 0) {
-
-    console.info(
-      'TUX POS — No available stock items to deduct. Order can proceed.',
-      {
-        referenceId,
-        orderLabel
-      }
-    );
-
-    return true;
-  }
-
-
-  /* =======================================================
-     9. SELECT AUTHENTICATED SUPABASE CLIENT
+     8. DETERMINE ROLE AND SESSION TOKEN
      ======================================================= */
 
   try {
 
     const activeRole =
       typeof getActiveRole === 'function'
-        ? getActiveRole()
+        ? String(getActiveRole() || '').toLowerCase()
         : '';
 
-    const deductionClient =
-      activeRole === 'tuxadmin'
-        ? (
-            typeof tuxAdminAuthClient !== 'undefined'
-              ? tuxAdminAuthClient
-              : null
-          )
-        : supabaseClient;
+    let deductionClient = null;
+    let accountId = '';
+    let sessionToken = null;
+
+    let selectedClientName = '';
 
 
-    if (!deductionClient) {
+    /* =====================================================
+       TUX ADMIN — SUPABASE AUTH
+    ===================================================== */
 
-      throw new Error(
-        'The Supabase authentication client is unavailable.'
-      );
+    if (activeRole === 'tuxadmin') {
+
+      if (
+        typeof tuxAdminAuthClient === 'undefined' ||
+        !tuxAdminAuthClient
+      ) {
+        throw new Error(
+          'TUX Admin authentication client is unavailable.'
+        );
+      }
+
+      deductionClient = tuxAdminAuthClient;
+      selectedClientName = 'tuxAdminAuthClient';
+
+      const {
+        data: sessionData,
+        error: sessionError
+      } = await deductionClient.auth.getSession();
+
+      if (sessionError) {
+        throw sessionError;
+      }
+
+      const session = sessionData?.session;
+
+      if (!session?.access_token || !session?.user?.id) {
+        throw new Error(
+          'TUX Admin Supabase session is missing.'
+        );
+      }
+
+      accountId = String(session.user.id);
     }
 
 
     /* =====================================================
-       10. CHECK AUTHENTICATION SESSION
-       ===================================================== */
+       ADMIN — CUSTOM ONLINE SESSION
+    ===================================================== */
 
-    const {
-      data: sessionData,
-      error: sessionError
-    } = await deductionClient.auth.getSession();
+    else if (activeRole === 'admin') {
 
-    const session =
-      sessionData?.session || null;
+      deductionClient = supabaseClient;
+      selectedClientName = 'supabaseClient';
 
+      if (
+        typeof activeAdminId === 'undefined' ||
+        !activeAdminId
+      ) {
+        throw new Error(
+          'Active Admin ID is missing.'
+        );
+      }
+
+      accountId = String(activeAdminId).trim();
+
+      if (
+        typeof getTuxOnlinePresenceTokens !== 'function'
+      ) {
+        throw new Error(
+          'Online presence token storage is unavailable.'
+        );
+      }
+
+      const presenceTokens =
+        getTuxOnlinePresenceTokens();
+
+      const adminSession =
+        presenceTokens?.['admin:' + accountId];
+
+      sessionToken =
+        typeof adminSession === 'string'
+          ? adminSession
+          : adminSession?.token;
+
+      if (!sessionToken) {
+        throw new Error(
+          'Admin online session token is missing. Please log out and log in again.'
+        );
+      }
+    }
+
+
+    /* =====================================================
+       WORKER — CUSTOM WORKER SESSION
+    ===================================================== */
+
+    else if (activeRole === 'worker') {
+
+      deductionClient = supabaseClient;
+      selectedClientName = 'supabaseClient';
+
+      let workerId = '';
+
+      if (
+        typeof activeWorkerId !== 'undefined' &&
+        activeWorkerId
+      ) {
+        workerId = String(activeWorkerId);
+
+      } else if (
+        typeof currentWorkerId !== 'undefined' &&
+        currentWorkerId
+      ) {
+        workerId = String(currentWorkerId);
+
+      } else if (
+        typeof activeStaffId !== 'undefined' &&
+        activeStaffId
+      ) {
+        workerId = String(activeStaffId);
+
+      } else if (
+        typeof activeStaff !== 'undefined' &&
+        activeStaff?.id
+      ) {
+        workerId = String(activeStaff.id);
+
+      } else if (
+        typeof activeStaffIds !== 'undefined' &&
+        Array.isArray(activeStaffIds)
+      ) {
+
+        const uniqueWorkerIds = [
+          ...new Set(
+            activeStaffIds
+              .filter(Boolean)
+              .map(id => String(id))
+          )
+        ];
+
+        if (uniqueWorkerIds.length === 1) {
+          workerId = uniqueWorkerIds[0];
+        }
+
+        if (uniqueWorkerIds.length > 1) {
+          throw new Error(
+            'Multiple active workers were found. The current worker ID must be identified.'
+          );
+        }
+      }
+
+      if (!workerId) {
+        throw new Error(
+          'Active Worker ID is missing. The worker ID could not be identified from the current login state.'
+        );
+      }
+
+      accountId = workerId;
+
+      if (
+        typeof getTuxWorkerSessionTokens !== 'function'
+      ) {
+        throw new Error(
+          'Worker session token storage is unavailable.'
+        );
+      }
+
+      const workerTokens =
+        getTuxWorkerSessionTokens();
+
+      const workerSession =
+        workerTokens?.[accountId];
+
+      sessionToken =
+        typeof workerSession === 'string'
+          ? workerSession
+          : workerSession?.token;
+
+      if (!sessionToken) {
+        throw new Error(
+          'Worker session token is missing. Please log out and log in again.'
+        );
+      }
+    }
+
+
+    /* =====================================================
+       INVALID ROLE
+    ===================================================== */
+
+    else {
+
+      throw new Error(
+        'Your current role is not authorized for stock deduction.'
+      );
+
+    }
+
+
+    /* =====================================================
+       9. DEBUG AUTHENTICATION
+    ===================================================== */
 
     console.log(
       'TUX POS — STOCK AUTH DEBUG:',
       {
         activeRole,
-
-        selectedClient:
-          activeRole === 'tuxadmin'
-            ? 'tuxAdminAuthClient'
-            : 'supabaseClient',
-
-        hasSession:
-          !!session,
-
-        userId:
-          session?.user?.id || null,
-
-        accessTokenExists:
-          !!session?.access_token,
-
-        sessionError:
-          sessionError?.message || null
+        selectedClient: selectedClientName,
+        accountId,
+        hasCustomSessionToken: Boolean(sessionToken),
+        usesSupabaseAuth: activeRole === 'tuxadmin'
       }
     );
-
-
-    console.log(
-      'TUX POS — AUTH CLIENT DETAILS:',
-      {
-        activeRole,
-
-        clientUrl:
-          deductionClient.supabaseUrl || null,
-
-        clientHasAuth:
-          !!deductionClient.auth,
-
-        sessionUserId:
-          session?.user?.id || null
-      }
-    );
-
-
-    if (sessionError) {
-
-      throw new Error(
-        'Could not verify the authentication session: ' +
-        sessionError.message
-      );
-    }
-
-
-    if (!session || !session.access_token) {
-
-      console.error(
-        'TUX POS — Missing authenticated session.',
-        {
-          activeRole
-        }
-      );
-
-      alert(
-        'Could not deduct stock.\n\n' +
-        'Your Supabase session is missing or expired.'
-      );
-
-      return false;
-    }
 
 
     /* =====================================================
-       11. EXECUTE SUPABASE DEDUCTIONS
-       ===================================================== */
+       10. EXECUTE STOCK DEDUCTIONS
+    ===================================================== */
 
     for (const task of deductionTasks) {
 
@@ -2070,26 +2161,27 @@ async function deductStockForOrder(ord) {
         stockItem
       } = task;
 
-
       const {
         data: deductionResult,
         error: deductionError
       } = await deductionClient.rpc(
-        'deduct_stock_for_order',
+        'deduct_stock_for_order_v2',
         {
           p_stock_item_id: stockItemId,
           p_quantity: quantity,
           p_reference_id: referenceId,
           p_movement_type: movementType,
-          p_note: movementNote
+          p_note: movementNote,
+          p_role: activeRole,
+          p_account_id: accountId,
+          p_session_token: sessionToken
         }
       );
-
 
       if (deductionError) {
 
         console.error(
-          'TUX POS — Atomic stock deduction failed.',
+          'TUX POS — Stock deduction RPC failed.',
           {
             stockItemId,
             stockItemName: stockItem.name,
@@ -2097,7 +2189,7 @@ async function deductStockForOrder(ord) {
             referenceId,
             movementType,
             activeRole,
-            userId: session.user.id,
+            accountId,
             error: deductionError
           }
         );
@@ -2111,7 +2203,6 @@ async function deductStockForOrder(ord) {
 
         return false;
       }
-
 
       if (
         !deductionResult ||
@@ -2137,7 +2228,9 @@ async function deductStockForOrder(ord) {
       }
 
 
-      /* UPDATE LOCAL STOCK QUANTITY */
+      /* =================================================
+         UPDATE LOCAL STOCK
+      ================================================= */
 
       const newQuantity = Number(
         deductionResult.current_quantity
@@ -2147,24 +2240,19 @@ async function deductStockForOrder(ord) {
         stockItem.current = newQuantity;
       }
 
-
       console.log(
         'TUX POS — Stock deduction completed.',
         {
           stockItemId,
           stockItemName: stockItem.name,
-
-          requestedDeduction:
-            quantity,
+          requestedDeduction: quantity,
 
           actualDeduction:
             deductionResult.already_deducted === true
               ? 0
               : quantity,
 
-          remaining:
-            stockItem.current,
-
+          remaining: stockItem.current,
           referenceId,
           movementType,
 
@@ -2175,9 +2263,9 @@ async function deductStockForOrder(ord) {
     }
 
 
-    /* =====================================================
-       12. REFRESH STOCK UI
-       ===================================================== */
+    /* =======================================================
+       11. REFRESH STOCK UI
+       ======================================================= */
 
     if (typeof renderStock === 'function') {
       renderStock();
@@ -2188,9 +2276,9 @@ async function deductStockForOrder(ord) {
     }
 
 
-    /* =====================================================
-       13. NOTIFY OTHER COMPONENTS
-       ===================================================== */
+    /* =======================================================
+       12. NOTIFY OTHER COMPONENTS
+       ======================================================= */
 
     document.dispatchEvent(
       new CustomEvent(
@@ -2217,22 +2305,19 @@ async function deductStockForOrder(ord) {
     );
 
 
-    /* =====================================================
-       14. FINISH
-       ===================================================== */
+    /* =======================================================
+       13. FINISH
+       ======================================================= */
 
     console.info(
       'TUX POS — Stock deduction processing completed.',
       {
         referenceId,
         orderLabel,
-
-        stockItemsProcessed:
-          deductionTasks.length,
-
-        productsSkippedWithoutRecipes:
-          skippedProducts.length,
-
+        activeRole,
+        selectedClient: selectedClientName,
+        stockItemsProcessed: deductionTasks.length,
+        productsSkippedWithoutRecipes: skippedProducts.length,
         skippedProducts
       }
     );
@@ -2259,6 +2344,11 @@ async function deductStockForOrder(ord) {
   }
 }
 
+/* =========================================================
+   GLOBAL EXPOSURE
+   ========================================================= */
+
+window.deductStockForOrder = deductStockForOrder;
 
 
 
