@@ -52,11 +52,12 @@ function renderSalesReport() {
 
 
     const currentShiftSales =
-        Array.isArray(completedSales)
-            ? completedSales.filter(function (order) {
-                return order.status === 'done';
-            })
-            : [];
+  typeof getReportSalesForCurrentShift === 'function'
+    ? getReportSalesForCurrentShift().filter(
+        order =>
+          String(order.status || '').toLowerCase() === 'done'
+      )
+    : [];
 
 
     const totalOrders =
