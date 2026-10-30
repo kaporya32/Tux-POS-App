@@ -21,6 +21,7 @@
    - Displays orders from the active shift only
    ========================================================= */
 
+
 function renderSalesReport() {
 
     /* =====================================================
@@ -41,23 +42,19 @@ function renderSalesReport() {
        ===================================================== */
 
     let totalCash = 0;
-
     let totalInsta = 0;
-
     let totalVisa = 0;
-
     let totalDisc = 0;
-
     let totalSales = 0;
 
 
     const currentShiftSales =
-  typeof getReportSalesForCurrentShift === 'function'
-    ? getReportSalesForCurrentShift().filter(
-        order =>
-          String(order.status || '').toLowerCase() === 'done'
-      )
-    : [];
+        typeof getReportSalesForCurrentShift === 'function'
+            ? getReportSalesForCurrentShift().filter(
+                order =>
+                    String(order.status || '').toLowerCase() === 'done'
+            )
+            : [];
 
 
     const totalOrders =
@@ -173,11 +170,135 @@ function renderSalesReport() {
             document.getElementById(elementId);
 
         if (element) {
+
             element.innerText = value;
+
         }
 
     }
 
+
+    /* =====================================================
+       DELIVERY & CANCELLED ORDERS
+       ===================================================== */
+
+    const allReportOrders =
+        Array.isArray(reportSales)
+            ? reportSales
+            : [];
+
+
+    /*
+     * Delivery Today:
+     * Completed orders belonging to the current shift.
+     */
+
+    const dailyDelivery =
+        currentShiftSales.reduce(function (total, order) {
+
+            const deliveryFee =
+                Number(
+                    order.deliveryFee ??
+                    order.delivery_fee ??
+                    0
+                ) || 0;
+
+            return total + Math.max(0, deliveryFee);
+
+        }, 0);
+
+
+    /*
+     * Overall Delivery:
+     * Completed orders across all shifts.
+     */
+
+    const overallDelivery =
+        allReportOrders
+            .filter(function (order) {
+
+                const status =
+                    String(order.status || '').toLowerCase();
+
+                return (
+                    status === 'done' ||
+                    status === 'completed'
+                );
+
+            })
+            .reduce(function (total, order) {
+
+                const deliveryFee =
+                    Number(
+                        order.deliveryFee ??
+                        order.delivery_fee ??
+                        0
+                    ) || 0;
+
+                return total + Math.max(0, deliveryFee);
+
+            }, 0);
+
+
+    /*
+     * Cancelled Orders:
+     * Cancelled orders belonging to the current shift.
+     */
+
+    const activeShiftId =
+        currentShift &&
+        currentShift.active === true &&
+        currentShift.supabaseId
+            ? String(currentShift.supabaseId)
+            : null;
+
+
+    const cancelledOrders =
+        allReportOrders.filter(function (order) {
+
+            const status =
+                String(order.status || '').toLowerCase();
+
+            const orderShiftId =
+                order.shiftId ??
+                order.shift_id ??
+                null;
+
+            return (
+                status === 'cancelled' &&
+                activeShiftId !== null &&
+                orderShiftId !== null &&
+                String(orderShiftId) === activeShiftId
+            );
+
+        }).length;
+
+
+    /* =====================================================
+       UPDATE DELIVERY & CANCELLED HTML
+       ===================================================== */
+
+    setReportValue(
+        'repDailyDelivery',
+        dailyDelivery.toFixed(2) + ' LE'
+    );
+
+
+    setReportValue(
+        'repOverallDelivery',
+        overallDelivery.toFixed(2) + ' LE'
+    );
+
+
+    setReportValue(
+        'repCancelledOrders',
+        cancelledOrders
+    );
+
+
+    /* =====================================================
+       UPDATE NORMAL REPORT FIELDS
+       ===================================================== */
 
     setReportValue(
         'repTotalCash',
@@ -271,22 +392,17 @@ function renderSalesReport() {
     const listContainer =
         document.getElementById('salesListContainer');
 
+
     if (!listContainer) {
+
         return;
+
     }
 
 
     /* =====================================================
        CHECK THE ACTIVE SHIFT
        ===================================================== */
-
-    const activeShiftId =
-        currentShift &&
-        currentShift.active === true &&
-        currentShift.supabaseId
-            ? String(currentShift.supabaseId)
-            : null;
-
 
     /*
      * If there is no active shift, don't show old orders
@@ -311,6 +427,7 @@ function renderSalesReport() {
         `;
 
         return;
+
     }
 
 
@@ -399,6 +516,7 @@ function renderSalesReport() {
         `;
 
         return;
+
     }
 
 
@@ -633,6 +751,8 @@ function renderSalesReport() {
     listContainer.innerHTML = html;
 
 }
+
+
 
 
 
